@@ -1,0 +1,651 @@
+---
+title: "htmlwidgets"
+author: "Fan"
+date: "2020年4月21日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE,message = FALSE,cache = FALSE)
+setwd("D:\\data_work\\R_sources\\my_code\\htmlwidgets")
+```
+
+>HTML widgets work just like R plots except they produce interactive web visualizations. A line or two of R code is all it takes to produce a D3 graphic or Leaflet map. HTML widgets can be used at the R console as well as embedded in R Markdown reports and Shiny web applications. In addition to the widgets featured below you may also want to check out the htmlwidgets gallery.
+
+可参考网站：[htmlwidgets](http://www.htmlwidgets.org/showcase_leaflet.html)
+
+## 简介
+
+截至2020年4月份，共有116个htmlwidgets注册在[htmlwidgets](http://www.htmlwidgets.org/showcase_leaflet.html)上。
+
+最受欢迎的有如下几个包，但注意，这个网站还有很多很棒的包，只有你想不到的，各种各样的都有！有空的时候可以多到这个网站上逛逛！
+
+* [Plotly](http://www.htmlwidgets.org/showcase_plotly.html)：可将ggplot图转成交互式图
+* [Highcharter](http://www.htmlwidgets.org/showcase_highcharts.html)：超级丰富的作图包，可参考：[highcharter](http://jkunst.com/highcharter/index.html)，是Highcharts JavaScript graphics library 的R接口。  
+* [visNetwork](http://www.htmlwidgets.org/showcase_visNetwork.html)：[vis.js](https://visjs.org/)的R接口。超级擅长于构建[网络图](https://visjs.github.io/vis-network/examples/)、[时间线事件标注图](https://visjs.github.io/vis-timeline/examples/timeline/)、[各种3D形状](https://visjs.github.io/vis-graph3d/examples/)。  
+* [networkD3](http://www.htmlwidgets.org/showcase_networkD3.html)：这个比较熟悉了，擅长于构建网络图、和弦图、桑基图、进化树图等。    
+* [DiagrammeR](http://www.htmlwidgets.org/showcase_diagrammer.html)：流程图专家，参考：[DiagrammeR](http://rich-iannone.github.io/DiagrammeR/)    
+* [Leaflet](http://www.htmlwidgets.org/showcase_leaflet.html)：画地图高手。
+* [DataTables](http://www.htmlwidgets.org/showcase_datatables.html)：数据表专家，可以对数据表排序、搜索等操作。  
+* [Dygraphs](http://www.htmlwidgets.org/showcase_dygraphs.html)：擅长于时间序列的展示，可以动态调整时间跨度。  
+* [threejs](http://www.htmlwidgets.org/showcase_threejs.html)：3D图专家，各种3D炫酷图，可参考：[three.js widgets for R](http://bwlewis.github.io/rthreejs/)。  
+* [rbokeh](http://www.htmlwidgets.org/showcase_rbokeh.html)：一个有趣的作图工具包，可参考：[Bokeh](http://hafen.github.io/rbokeh/index.html)。  
+* [rglwidget](http://www.htmlwidgets.org/showcase_rglwidget.html)：rgl的html扩展，很不错的渲染工具。
+* [d3heatmap](http://www.htmlwidgets.org/showcase_d3heatmap.html)：热图的交互式版本。  
+* [MetricsGraphics](http://www.htmlwidgets.org/showcase_metricsgraphics.html)：也是做D3系列图的包。  
+
+</br>
+&nbsp;
+
+重要的事情再说一遍！除了上面这几个，还有很多优秀的工具包，比如：[BioCircos](https://cran.rstudio.com/web/packages/BioCircos/vignettes/BioCircos.html)（生物信息多维展示,原Pyhton网站为：[BioCircos.js](http://bioinfo.ibp.ac.cn/biocircos/document/index.html)）、[Phylocanvas](https://zachcp.github.io/phylocanvas/articles/Advanced_Usage.html)（擅长进化树图）、[parcats](https://erblast.github.io/parcats/)（动态桑基图及各种神奇）、[rhandsontable](http://jrowen.github.io/rhandsontable/)（曾经想实现的在线Excel）、[rpdf](https://github.com/yonicd/rpdf)（PDF工具）。
+
+## 一些示例 {.tabset}
+
+### Highcharter {.tabset}
+
+
+主网站（不分语言）：[highcharts](https://www.highcharts.com/)  
+R语言包网站：[highcharter](http://jkunst.com/highcharter/index.html)  
+这两个网站都值得去看看！
+
+
+#### 一些不错的图
+
+```{r,fig.width=5,fig.height=3}
+library(highcharter)
+highchart() %>% 
+  hc_title(text = "Scatter chart with size and color") %>% 
+  hc_add_series_scatter(mtcars$wt, mtcars$mpg,
+                        mtcars$drat, mtcars$hp)
+
+require("survival")
+leukemia.surv <- survfit(Surv(time, status) ~ x, data = aml) 
+hchart(leukemia.surv)
+
+# Plot the cumulative hazard function
+lsurv2 <- survfit(Surv(time, status) ~ x, aml, type='fleming') 
+hchart(lsurv2, fun="cumhaz")
+
+# Plot the fit of a Cox proportional hazards regression model
+fit <- coxph(Surv(futime, fustat) ~ age, data = ovarian)
+ovarian.surv <- survfit(fit, newdata=data.frame(age=60))
+hchart(ovarian.surv, ranges = TRUE)
+
+highchart() %>% 
+  hc_add_series_boxplot(x = iris$Sepal.Length, by = iris$Species, name = "length") 
+
+
+require("ggplot2")
+data(economics, package = "ggplot2")
+hc_add_series_times_values(hc = highchart(),
+                           dates = economics$date,
+                           values = economics$psavert, 
+                           name = "Personal Savings Rate")
+
+data("weather")
+
+x <- c("Min", "Mean", "Max")
+y <- sprintf("{point.%s}", c("min_temperaturec", "mean_temperaturec", "max_temperaturec"))
+tltip <- tooltip_table(x, y)
+
+hchart(weather, type = "columnrange",
+       hcaes(x = date, low = min_temperaturec, high = max_temperaturec,
+             color = mean_temperaturec)) %>% 
+  hc_chart(polar = TRUE) %>%
+  hc_yAxis( max = 30, min = -10, labels = list(format = "{value} C"),
+            showFirstLabel = FALSE) %>% 
+  hc_xAxis(
+    title = list(text = ""), gridLineWidth = 0.5,
+    labels = list(format = "{value: %b}")) %>% 
+  hc_tooltip(useHTML = TRUE, pointFormat = tltip,
+             headerFormat = as.character(tags$small("{point.x:%d %B, %Y}")))
+
+
+data(citytemp)
+
+hc <- highchart() %>% 
+  hc_xAxis(categories = citytemp$month) %>% 
+  hc_add_series(name = "Tokyo", data = citytemp$tokyo) %>% 
+  hc_add_series(name = "London", data = citytemp$london) %>% 
+  hc_add_series(name = "Other city",
+                data = (citytemp$tokyo + citytemp$london)/2)
+hc %>% 
+  hc_chart(type = "column",
+           options3d = list(enabled = TRUE, beta = 15, alpha = 15))
+
+
+library("igraph")
+N <- 40
+
+net <- sample_gnp(N, p = 2/N)
+wc <- cluster_walktrap(net)
+
+V(net)$label <- seq(N)
+V(net)$name <- paste("I'm #", seq(N))
+V(net)$page_rank <- round(page.rank(net)$vector, 2)
+V(net)$betweenness <- round(betweenness(net), 2)
+V(net)$degree <- degree(net)
+V(net)$size <- V(net)$degree
+V(net)$comm <- membership(wc)
+V(net)$color <- colorize(membership(wc))
+
+hchart(net, layout = layout_with_fr)
+
+hchart(cor(mtcars))
+
+hcboxplot(x = diamonds$x, var = diamonds$color, var2 = diamonds$cut,
+          outliers = FALSE) %>% 
+  hc_chart(type = "column") # to put box vertical
+
+
+hchart(diamonds$price, color = "#d35400", name = "Price") %>% 
+  hc_title(text = "You can zoom me")
+
+
+hc <- highcharts_demo()
+hc %>% hc_add_theme(hc_theme_handdrawn())
+
+thm <- hc_theme_merge(
+  hc_theme_darkunica(),
+  hc_theme(
+    chart = list(
+      backgroundColor = "transparent",
+      divBackgroundImage = "http://cdn.wall-pix.net/albums/art-3Dview/00025095.jpg"
+    ),
+    title = list(
+      style = list(
+        color = 'white',
+        fontFamily = "Open Sans"
+      )
+    )
+  )
+)
+
+hc %>% hc_add_theme(thm)
+
+```
+
+#### 更多的图
+
+```{r}
+library(dplyr)
+library(stringr)
+library(purrr)
+
+n <- 5
+set.seed(123)
+
+colors <- c("#d35400", "#2980b9", "#2ecc71", "#f1c40f", "#2c3e50", "#7f8c8d")
+colors2 <- c("#000004", "#3B0F70", "#8C2981", "#DE4968", "#FE9F6D", "#FCFDBF")
+
+df <- data.frame(x = seq_len(n) - 1) %>% 
+  mutate(
+    y = 10 + x + 10 * sin(x),
+    y = round(y, 1),
+    z = (x*y) - median(x*y),
+    e = 10 * abs(rnorm(length(x))) + 2,
+    e = round(e, 1),
+    low = y - e,
+    high = y + e,
+    value = y,
+    name = sample(fruit[str_length(fruit) <= 5], size = n),
+    color = rep(colors, length.out = n),
+    segmentColor = rep(colors2, length.out = n)
+  )
+
+create_hc <- function(t) {
+  
+  dont_rm_high_and_low <- c("arearange", "areasplinerange",
+                            "columnrange", "errorbar")
+  
+  is_polar <- str_detect(t, "polar")
+  
+  t <- str_replace(t, "polar", "")
+  
+  if(!t %in% dont_rm_high_and_low) df <- df %>% select(-e, -low, -high)
+  
+  
+  highchart() %>%
+    hc_title(text = paste(ifelse(is_polar, "polar ", ""), t),
+             style = list(fontSize = "15px")) %>% 
+    hc_chart(type = t,
+             polar = is_polar) %>% 
+    hc_xAxis(categories = df$name) %>% 
+    hc_add_series(df, name = "Fruit Consumption", showInLegend = FALSE) 
+  
+}
+
+hcs <- c("line", "spline",  "area", "areaspline",
+         "column", "bar", "waterfall" , "funnel", "pyramid",
+         "pie" , "treemap", "scatter", "bubble",
+         "arearange", "areasplinerange", "columnrange", "errorbar",
+         "polygon", "polarline", "polarcolumn", "polarcolumnrange",
+         "coloredarea", "coloredline")  %>% 
+  map(create_hc)
+```
+
+
+```{css, echo=FALSE}
+.table_3X8 {
+  width:1000px;
+  height:6000px;
+}
+.td_3X8 {
+  width:500px;
+  height:500px;
+}
+```
+
+```{python, engine.path="C:/ProgramData/Anaconda3/python", eval=F}
+pic_table = '''<table class="table_3X8">'''
+for i in range(12):
+    pic_table = pic_table + '''
+  <tr>
+    <td class="td_3X8">`r hcs[[{0}]]`</td>
+    <td class="td_3X8">`r hcs[[{1}]]`</td>
+  </tr>'''.format(i*2+1, i*2+2)
+
+pic_table = pic_table + '''
+</table>'''
+print(pic_table)
+```
+
+<table class="table_3X8">
+  <tr>
+    <td class="td_3X8">`r hcs[[1]]`</td>
+    <td class="td_3X8">`r hcs[[2]]`</td>
+  </tr>
+  <tr>
+    <td class="td_3X8">`r hcs[[3]]`</td>
+    <td class="td_3X8">`r hcs[[4]]`</td>
+  </tr>
+  <tr>
+    <td class="td_3X8">`r hcs[[5]]`</td>
+    <td class="td_3X8">`r hcs[[6]]`</td>
+  </tr>
+  <tr>
+    <td class="td_3X8">`r hcs[[7]]`</td>
+    <td class="td_3X8">`r hcs[[8]]`</td>
+  </tr>
+  <tr>
+    <td class="td_3X8">`r hcs[[9]]`</td>
+    <td class="td_3X8">`r hcs[[10]]`</td>
+  </tr>
+  <tr>
+    <td class="td_3X8">`r hcs[[11]]`</td>
+    <td class="td_3X8">`r hcs[[12]]`</td>
+  </tr>
+  <tr>
+    <td class="td_3X8">`r hcs[[13]]`</td>
+    <td class="td_3X8">`r hcs[[14]]`</td>
+  </tr>
+  <tr>
+    <td class="td_3X8">`r hcs[[15]]`</td>
+    <td class="td_3X8">`r hcs[[16]]`</td>
+  </tr>
+  <tr>
+    <td class="td_3X8">`r hcs[[17]]`</td>
+    <td class="td_3X8">`r hcs[[18]]`</td>
+  </tr>
+  <tr>
+    <td class="td_3X8">`r hcs[[19]]`</td>
+    <td class="td_3X8">`r hcs[[20]]`</td>
+  </tr>
+  <tr>
+    <td class="td_3X8">`r hcs[[21]]`</td>
+    <td class="td_3X8">`r hcs[[22]]`</td>
+  </tr>
+  <tr>
+    <td class="td_3X8">`r hcs[[23]]`</td>
+    <td class="td_3X8"></td>
+  </tr>
+</table>
+
+### threejs
+
+
+
+```{r}
+
+library(threejs)
+N     = 20000
+theta = runif(N)*2*pi
+phi   = runif(N)*2*pi
+R     = 1.5
+r     = 1.0
+
+x = (R + r*cos(theta))*cos(phi)
+y = (R + r*cos(theta))*sin(phi)
+z = r*sin(theta)
+
+d = 6
+h = 6
+t = 2*runif(N) - 1
+w = t^2*sqrt(1-t^2)
+x1 = d*cos(theta)*sin(phi)*w
+y1 = d*sin(theta)*sin(phi)*w
+
+i = order(phi)
+j = order(t)
+col = c(rainbow(length(phi))[order(i)],
+        rainbow(length(t), start=0, end=2/6)[order(j)])
+
+M = cbind(x=c(x, x1), y=c(y, y1), z=c(z, h*t))
+scatterplot3js(M, size=0.1, color=col, bg="black", pch=".")
+```
+
+
+```{r}
+library(threejs)
+data(ego)
+graphjs(ego, bg="black")
+```
+
+
+```{r}
+library(threejs)
+z <- seq(-10, 10, 0.1)
+x <- cos(z)
+y <- sin(z)
+scatterplot3js(x,y,z, color=rainbow(length(z)))
+```
+
+
+```{r}
+library(threejs)
+data(LeMis)
+graphjs(LeMis, layout=layout_with_fr(LeMis, dim=3))
+```
+
+
+```{r}
+library(threejs)
+earth <- "http://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73909/world.topo.bathy.200412.3x5400x2700.jpg"
+globejs(img=earth, bg="white")
+```
+
+
+```{r}
+library(threejs)
+data(LeMis)
+graphjs(LeMis) %>% points3d(vertices(.), color="red", pch=V(LeMis)$label)
+```
+
+```{r,eval=FALSE}
+# or equivalently without using the pipe:
+g <- graphjs(LeMis)
+points3d(g, vertices(g), color="red", pch=V(LeMis)$label)
+```
+
+
+```{r}
+suppressMessages({
+  library(threejs)
+  library(crosstalk)
+  library(DT)
+})
+
+data(LeMis)
+
+sd = SharedData$new(data.frame(Name = V(LeMis)$label))
+bscols(
+  graphjs(LeMis, brush=TRUE, crosstalk=sd, width=450),
+  datatable(sd, rownames=FALSE, options=list(dom='tp'), width=450)
+)
+```
+
+### DiagrammeR
+这个包简直是画流程图的神器：[DiagrammeR](http://rich-iannone.github.io/DiagrammeR/index.html)
+如下代码可在console里面运行，但是rmarkdown渲染会出错。
+
+
+```{r, eval=FALSE}
+library(DiagrammeR)
+grViz("
+digraph rmarkdown {
+A -> B
+}
+", height = 200)
+```
+
+
+```{r,eval=FALSE}
+library(DiagrammeR)
+mermaid("
+graph LR {
+A -> B  
+}
+", height = 200)
+```
+
+
+```{r, eval=FALSE}
+grViz("
+digraph boxes_and_circles {
+      
+      # a 'graph' statement
+      graph [overlap = true, fontsize = 10]
+      
+      # several 'node' statements
+      node [shape = box,
+      fontname = Helvetica]
+      A; B; C; D; E; F
+      
+      node [shape = circle,
+      fixedsize = true,
+      width = 0.9] // sets as circles
+      1; 2; 3; 4; 5; 6; 7; 8
+      
+      # several 'edge' statements
+      A->1 B->2 B->3 B->4 C->A
+      1->D E->A 2->4 1->5 1->F
+      E->6 4->6 5->7 6->7 3->8
+      }
+      ")
+```
+
+
+### rbokeh
+
+是bokeh的R接口，可Python库网站参考：[bokeh](https://docs.bokeh.org/en/latest/docs/gallery.html)，以及有一些不错的示例：[二维交互式直方图](https://demo.bokeh.org/selection_histogram)、[动态气泡图](https://demo.bokeh.org/gapminder)、[可聚焦的直方图](https://demo.bokeh.org/stocks)、[操作表格并导出到CSV](https://demo.bokeh.org/export_csv)、[多个特征峰分开显示](https://docs.bokeh.org/en/latest/docs/gallery/ridgeplot.html)
+
+R网站可参考：[Bokeh](http://hafen.github.io/rbokeh/index.html)
+
+#### 一些有趣的例子
+
+
+```{r}
+library(rbokeh)
+# prepare data
+elements <- subset(elements, !is.na(group))
+elements$group <- as.character(elements$group)
+elements$period <- as.character(elements$period)
+
+# add colors for groups
+metals <- c("alkali metal", "alkaline earth metal", "halogen",
+  "metal", "metalloid", "noble gas", "nonmetal", "transition metal")
+colors <- c("#a6cee3", "#1f78b4", "#fdbf6f", "#b2df8a", "#33a02c",
+  "#bbbb88", "#baa2a6", "#e08e79")
+elements$color <- colors[match(elements$metal, metals)]
+elements$type <- elements$metal
+
+# make coordinates for labels
+elements$symx <- paste(elements$group, ":0.1", sep = "")
+elements$numbery <- paste(elements$period, ":0.8", sep = "")
+elements$massy <- paste(elements$period, ":0.15", sep = "")
+elements$namey <- paste(elements$period, ":0.3", sep = "")
+
+# create figure
+p <- figure(title = "Periodic Table", tools = c("resize", "hover"),
+  ylim = as.character(c(7:1)), xlim = as.character(1:18),
+  xgrid = FALSE, ygrid = FALSE, xlab = "", ylab = "",
+  height = 445, width = 800) %>%
+
+# plot rectangles
+ly_crect(group, period, data = elements, 0.9, 0.9,
+  fill_color = color, line_color = color, fill_alpha = 0.6,
+  hover = list(name, atomic.number, type, atomic.mass,
+    electronic.configuration)) %>%
+
+# add symbol text
+ly_text(symx, period, text = symbol, data = elements,
+  font_style = "bold", font_size = "10pt",
+  align = "left", baseline = "middle") %>%
+
+# add atomic number text
+ly_text(symx, numbery, text = atomic.number, data = elements,
+  font_size = "6pt", align = "left", baseline = "middle") %>%
+
+# add name text
+ly_text(symx, namey, text = name, data = elements,
+  font_size = "4pt", align = "left", baseline = "middle") %>%
+
+# add atomic mass text
+ly_text(symx, massy, text = atomic.mass, data = elements,
+  font_size = "4pt", align = "left", baseline = "middle")
+
+p
+```
+
+```{r}
+library(rbokeh)
+wa_cancer <- droplevels(subset(latticeExtra::USCancerRates, state == "Washington"))
+## y axis sorted by male rate
+ylim <- levels(with(wa_cancer, reorder(county, rate.male)))
+
+figure(ylim = ylim, width = 700, height = 600, tools = "") %>%
+  ly_segments(LCL95.male, county, UCL95.male,
+    county, data = wa_cancer, color = NULL, width = 2) %>%
+  ly_points(rate.male, county, glyph = 16, data = wa_cancer)
+```
+
+### BioCircos
+
+```{r}
+library(BioCircos)
+
+# Fix random generation for reproducibility
+set.seed(3)
+
+# SNP tracks
+tracks = BioCircosSNPTrack("testSNP1", as.character(rep(1:10,10)), 
+  round(runif(100, 1, 135534747)), 
+  runif(100, 0, 10), colors = "Spectral", minRadius = 0.3, maxRadius = 0.45)
+tracks = tracks + BioCircosSNPTrack("testSNP2", as.character(rep(1:15,5)), 
+  round(runif(75, 1, 102531392)), 
+  runif(75, 2, 12), colors = c("#FF0000", "#DD1111", "#BB2222", "#993333"), 
+  maxRadius = 0.8, range = c(2,12))
+# Overlap point of interest on previous track, fix range to use a similar scale
+tracks = tracks + BioCircosSNPTrack("testSNP3", "7", 1, 9, maxRadius = 0.8, size = 6,
+  range = c(2,12))
+
+# Background and text tracks
+tracks = tracks + BioCircosBackgroundTrack("testBGtrack1", minRadius = 0.3, maxRadius = 0.45,
+  borderColors = "#FFFFFF", borderSize = 0.6)    
+tracks = tracks + BioCircosBackgroundTrack("testBGtrack2", borderColors = "#FFFFFF", 
+  fillColor = "#FFEEEE", borderSize = 0.6, maxRadius = 0.8)
+tracks = tracks + BioCircosTextTrack("testText", 'BioCircos!', weight = "lighter", 
+  x = - 0.17, y = - 0.87)
+
+# Arc track
+arcsEnds = round(runif(7, 50000001, 133851895))
+arcsLengths = round(runif(7, 1, 50000000))
+tracks = tracks + BioCircosArcTrack("fredTestArc", as.character(sample(1:12, 7, replace=T)), 
+  starts = arcsEnds - arcsLengths, ends = arcsEnds, labels = 1:7, 
+  maxRadius = 0.97, minRadius = 0.83)
+
+# Link tracks
+linkPos1 = round(runif(5, 1, 50000000))
+linkPos2 = round(runif(5, 1, 50000000))
+chr1 = sample(1:22, 5, replace = T)
+chr2 = sample(1:22, 5, replace = T)
+linkPos3 = round(runif(5, 1, 50000000))
+linkPos4 = round(runif(5, 1, 50000000))
+chr3 = sample(1:22, 5, replace = T)
+chr4 = sample(1:22, 5, replace = T)
+tracks = tracks + BioCircosLinkTrack("testLink", gene1Chromosomes = chr1, 
+  gene1Starts = linkPos1, gene1Ends = linkPos1+1, gene2Chromosomes = chr2, axisPadding = 6,
+  color = "#EEEE55", width = "0.3em", labels = paste(chr1, chr2, sep = "*"), displayLabel = F,
+  gene2Starts = linkPos2, gene2Ends = linkPos2+1, maxRadius = 0.42)
+tracks = tracks + BioCircosLinkTrack("testLink2", gene1Chromosomes = chr3, 
+  gene1Starts = linkPos3, gene1Ends = linkPos3+5000000, axisPadding = 6, displayLabel = F,
+  color = "#FF6666", labels = paste(chr3, chr4, sep = "-"), gene2Chromosomes = chr4,
+  gene2Starts = linkPos4, gene2Ends = linkPos4+2500000, maxRadius = 0.42)
+
+# Display the BioCircos visualization
+BioCircos(tracks, genomeFillColor = "Spectral", yChr = T, chrPad = 0, displayGenomeBorder = F, 
+  genomeTicksLen = 3, genomeTicksTextSize = 0, genomeTicksScale = 50000000,
+  genomeLabelTextSize = 18, genomeLabelDy = 0)
+```
+
+### parcats
+
+```{r}
+library(parcats)
+suppressPackageStartupMessages( require(tidyverse) )
+suppressPackageStartupMessages( require(easyalluvial) )
+suppressPackageStartupMessages( require(parcats) )
+p = alluvial_wide(mtcars2, max_variables = 5)
+
+parcats(p, marginal_histograms = TRUE, data_input = mtcars2)
+
+
+df = select(mtcars2, -ids )
+m = randomForest::randomForest( disp ~ ., df)
+imp = m$importance
+dspace = get_data_space(df, imp, degree = 3)
+pred = predict(m, newdata = dspace)
+p = alluvial_model_response(pred, dspace, imp, degree = 3)
+
+parcats(p, marginal_histograms = TRUE, imp = TRUE, data_input = df)
+```
+
+### rhandsontable
+
+网页版Excel
+
+下面展示几个基础功能的实现，还有很多丰富的概念，详细请参考：[rhandsontable](http://jrowen.github.io/rhandsontable/)
+
+```{r}
+library(rhandsontable)
+DF = data.frame(integer = 1:10,
+                numeric = rnorm(10),
+                logical = rep(TRUE, 10), 
+                character = LETTERS[1:10],
+                factor = factor(letters[1:10], levels = letters[10:1], 
+                                ordered = TRUE),
+                factor_allow = factor(letters[1:10], levels = letters[10:1], 
+                                      ordered = TRUE),
+                date = seq(from = Sys.Date(), by = "days", length.out = 10),
+                stringsAsFactors = FALSE)
+
+rhandsontable(DF, width = 600, height = 300) %>%
+  hot_col("factor_allow", allowInvalid = TRUE)
+```
+
+```{r}
+DF = data.frame(val = 1:10, bool = TRUE, big = LETTERS[1:10],
+                small = letters[1:10],
+                dt = seq(from = Sys.Date(), by = "days", length.out = 10),
+                stringsAsFactors = FALSE)
+
+rhandsontable(DF, width = 550, height = 300) %>%
+  hot_col("small", "password")
+```
+
+```{r}
+DF = data.frame(val = 1:10, bool = TRUE, big = LETTERS[1:10],
+                small = letters[1:10],
+                dt = seq(from = Sys.Date(), by = "days", length.out = 10),
+                stringsAsFactors = FALSE)
+
+DF$chart = c(sapply(1:5,
+                    function(x) jsonlite::toJSON(list(values=rnorm(10),
+                                                      options = list(type = "bar")))),
+             sapply(1:5,
+                    function(x) jsonlite::toJSON(list(values=rnorm(10),
+                                                      options = list(type = "line")))))
+
+rhandsontable(DF, rowHeaders = NULL, width = 550, height = 300) %>%
+  hot_col("chart", renderer = htmlwidgets::JS("renderSparkline"))
+```

@@ -1,0 +1,12 @@
+Package: FanCodeV1
+Type: Package
+Title: Daily code.
+Version: 0.1.0
+Author: Fan
+Maintainer: Fan <fanj13@fudan.edu.cn>
+Description: This is the version 1.0 code for daily use.
+    More code would be updated in future.
+License: MIT
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.1.0

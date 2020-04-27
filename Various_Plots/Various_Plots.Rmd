@@ -1,0 +1,801 @@
+---
+title: "Various_Plots"
+author: "Fan"
+date: "2020年4月20日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = F,message = F)
+setwd("D:\\data_work\\R_sources\\my_code\\Various_Plots")
+```
+
+## 桑基图
+R里面主要有2个包可以画桑基图，一个是交互式作图包networkD3，另一个是基于ggplot2专门画桑基图的ggalluvial，前者可以交互，后者可以标示流量的颜色，各有优势。还有就是ggforce的geom_parallel_sets也是可以画桑基图的。
+
+networkD3的功能很丰富，可参考：[networkD3](http://christophergandrud.github.io/networkD3/)
+
+ggalluvial文档内容也很不错，可参考：[ggalluvial](http://corybrunson.github.io/ggalluvial/)
+
+此外，sankeywheel包也可以画桑基图和和弦图，可参考：[sankeywheel](https://cran.r-project.org/web/packages/sankeywheel/vignettes/sankeywheel.html)。
+
+```{r Sankey_ggalluvial}
+#install.packages("ggalluvial")
+library(ggalluvial)
+library(reshape2)
+titanic_wide <- data.frame(Titanic)
+head(titanic_wide)
+ggplot(data = titanic_wide,
+       aes(axis1 = Class, axis2 = Sex, axis3 = Age,
+           y = Freq)) +
+  scale_x_discrete(limits = c("Class", "Sex", "Age"), expand = c(.1, .05)) +
+  xlab("Demographic") +
+  # geom_alluvium(aes(fill = Survived)) +
+  geom_alluvium(aes(fill = Class)) +
+  geom_stratum() + geom_text(stat = "stratum", infer.label = TRUE) +
+  theme_minimal() +
+  ggtitle("passengers on the maiden voyage of the Titanic",
+          "stratified by demographics and survival")
+```
+
+```{r Sankey_networkD3, cache=F}
+library(networkD3)
+library(dplyr)
+Sankey<-tibble(Source=c("A","A","B","C","C","C","u","u","u","u","u","u","v","v","v","v","w","w"),
+               Target=c("u","v","u","w","u","v","1","2","3","4","6","7","1","2","4","5","3","7"),
+               Value =c( 1,  3,  5,  2,  2,  1,  2,  1,  2,  1,  1,  1,  1,  1,  1,  1,  1,  1))
+Sankeylinks<-Sankey
+Sankeynodes<-data.frame(name=unique(c(Sankeylinks$Source,Sankeylinks$Target)),stringsAsFactors=FALSE)  
+Sankeynodes$index<-0:(nrow(Sankeynodes) - 1)
+Sankeylinks<-merge(Sankeylinks,Sankeynodes,by.x="Source",by.y="name")
+Sankeylinks<-merge(Sankeylinks,Sankeynodes,by.x="Target",by.y="name")
+
+Sankeydata<-Sankeylinks[,c(4,5,3)];names(Sankeydata)<-c("Source","Target","Value")
+Sankeyname<-Sankeynodes[,1,drop=FALSE]
+
+sankeyNetwork(Links=Sankeydata,Nodes=Sankeyname, Source ="Source",
+              Target = "Target", Value = "Value", NodeID = "name",
+              units = "TWh", fontSize = 12, nodeWidth = 30)
+
+```
+
+## 和弦图
+和弦图主要有networkD3和recharts包可构建。其中recharts包是基于Echarts构建的，github有多个版本，此处选择比较完善的版本madlogos/recharts，可参考：[recharts](https://madlogos.github.io/recharts)。
+
+```{r chord_networkD3}
+library(networkD3)
+hairColourData <- matrix(c(11975,  1951,  8010, 1013,
+                           5871, 10048, 16145,  990,
+                           8916,  2060,  8090,  940,
+                           2868,  6171,  8045, 6907),
+                         nrow = 4)
+
+chordNetwork(Data = hairColourData, 
+             width = 500, 
+             height = 500,
+             colourScale = c("#000000", 
+                             "#FFDD89", 
+                             "#957244", 
+                             "#F26223"),
+             labels = c("red", "brown", "blond", "gray"))
+```
+
+```{r chord_recharts}
+# devtools::install_github("madlogos/recharts")
+library(recharts)
+
+grpmtx <- matrix(c(11975, 5871, 8916, 2868, 1951, 10048, 2060, 6171, 8010, 16145,
+                   8090, 8045, 1013, 990, 940, 6907), byrow=TRUE, nrow=4)
+grpmtx <- as.data.frame(grpmtx)
+names(grpmtx) <- paste0('Group', 1:4)
+grpmtx$Name <- paste0('Group', 1:4)
+echartr(grpmtx, Name, c(Group1, Group2, Group3, Group4), 
+        type='chord', subtype='ribbon + asc + descsub + hidelab + scaletext') %>% 
+  setTitle('Test Data','From d3.js')
+
+# no ribbon
+echartr(deutsch[deutsch$year==2014,], c(club, player), weight, role, type='chord', 
+        sub='asc + descsub + rotatelab') %>% 
+  setTitle('Club Orientation of Deutsch Soccer Team (2014)')
+
+# 
+deutsch14 <- deutsch[deutsch$year==2014,]
+deutsch14 <- rbind(deutsch14, deutsch14)
+deutsch14[14:26, c('player', 'club')] <- recharts:::exchange(
+    deutsch14[14:26, 'player'], deutsch14[14:26, 'club'])
+echartr(deutsch14, c(club, player), weight, role, type='chord', 
+        sub='asc + descsub + rotatelab + ribbon') %>% 
+  setTitle('Club Orientation of Deutsch Soccer Team (2014)')
+
+# Chord with Timeline
+echartr(deutsch, c(club, player), weight, role, t=year, type='chord', 
+        sub='asc + descsub + rotatelab') %>% 
+    setTimeline(show=FALSE, autoPlay=TRUE) %>%
+    setTitle('Club Orientation of Deutsch Soccer Team')
+
+```
+
+recharts其他不错的图
+
+雷达图
+```{r}
+d1 <- data.frame(x=rep(LETTERS[1:6], 4), y=abs(rnorm(24)), 
+                 f=c(rep('i', 12), rep('ii', 12)), 
+                 s=rep(c(rep('I', 6), rep('II', 6)), 2))
+echartr(d1, x, y, s, facet=f, type='radar', 
+        subtype=list(c('fill', ''), c('', 'fill')))
+
+
+carstat = data.table::dcast(data.table::data.table(mtcars),
+              am + carb + gear ~., mean,
+              value.var=c('mpg','disp','hp','qsec','wt','drat'))
+carstat = data.table::melt(carstat, id=c('am', 'carb', 'gear'))
+names(carstat) <- c('am', 'carb', 'gear', 'indicator', 'Parameter')
+levels(carstat$indicator) <- gsub("_mean_\\.", "",
+                                  levels(carstat$indicator))
+carstat$am <- factor(carstat$am, labels=c('A', 'M'))
+fullData <- data.frame(expand.grid(levels(carstat$indicator),
+            levels(carstat$am), unique(carstat$carb)))
+carstat <- merge(fullData, carstat, all.x=TRUE)
+carstat$carb <- as.factor(carstat$carb)
+carstat$gear <- as.factor(carstat$gear)
+echartr(carstat, indicator, Parameter, am, facet=carb, t=gear, type='radar') %>%
+    setTitle('Merc 450SE  vs  450SL  vs  450SLC')
+```
+
+地图
+```{r}
+echartr(NULL, type='map_china') %>% setTitle('China Map')
+```
+飞机航线地图
+```{r}
+route <- flight$route
+names(route) <- c('name1', 'name2')
+coord <- flight$coord
+target <- data.frame(
+    name1=c(rep('北京', 10), rep('上海', 10), rep('广州', 10)),
+    name2=c(
+        "上海","广州","大连","南宁","南昌","拉萨","长春","包头","重庆","常州",
+        "包头","昆明","广州","郑州","长春","重庆","长沙","北京","丹东","大连",
+        "福州","太原","长春","重庆","西安","成都","常州","北京","北海","海口"),
+    value=c(95,90,80,70,60,50,40,30,20,10,95,90,80,70,60,50,40,30,20,10,95,90,
+            80,70,60,50,40,30,20,10))
+# series column mapping series of addML/addMP
+target$series <- paste0(target$name1, 'Top10')
+
+## apply addGeoCoord, and add markLines without values
+g <- echartr(NULL, type='map_china') %>% addGeoCoord(coord) %>%
+    addML(series=1, data=route, symbol=c('none', 'circle'), symbolSize=1, 
+          smooth=TRUE, itemStyle=list(normal=itemStyle(
+              color='#fff', borderWidth=1, borderColor='rgba(30,144,255,0.5)')))
+
+## modify itemStyle of the base map to align the areaStyle with bgColor and 
+## disable `hoverable`
+g <- g %>% setSeries(hoverable=FALSE, itemStyle=list(
+    normal=itemStyle(
+        borderColor='rgba(100,149,237,1)', borderWidth=0.5, 
+        areaStyle=areaStyle(color='#1b1b1b'))
+))
+
+line.effect <- list(
+    show=TRUE, scaleSize=1, period=30, color='#fff', shadowBlur=10)
+line.style <- list(normal=itemStyle(
+    borderWidth=1, lineStyle=lineStyle(type='solid', shadowBlur=10)))
+g1 <- g %>% 
+    addML(series=c('北京Top10', '上海Top10', '广州Top10'), data=target, 
+          smooth=TRUE, effect=line.effect, itemStyle=line.style)
+g1
+
+```
+
+</br>
+&nbsp;
+
+## ggplot系列衍生图
+
+### 极坐标系列
+
+极坐标基础知识
+
+```{r}
+p1<-ggplot(diamonds,aes(x=factor(1),fill=cut))+geom_bar(width=1)
+
+p1+coord_polar(theta = "y")
+
+p1+coord_polar(theta = "x")
+
+
+p2<-ggplot(diamonds,aes(cut))+
+  geom_bar(width=1,fill="steelblue",colour="white")+
+  theme(panel.grid = element_blank(),panel.background = element_blank(),
+        axis.text.x = element_blank(),axis.title = element_blank())
+
+p2 + coord_polar(theta = "y",start=0)
+p2 + coord_polar(theta = "x",start=0) + ylim(c(-3000,22500))
+
+ggplot(diamonds,aes(x=color,fill=cut))+
+  geom_bar(width=0.95,colour="white")+
+  coord_polar(theta = "y",start=0)+
+  scale_fill_brewer(palette="Blues")+
+  guides(fill=guide_legend(reverse=TRUE,title=NULL))+
+  theme(
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title = element_blank()
+  )
+
+counts_<-diamonds %>% group_by(cut) %>% summarise(n()) %>% arrange(desc(`n()`))
+labels<-counts_$cut
+counts<-counts_$`n()`
+counts_acc<-rep(0,5)
+counts_acc[1]<-counts[1]/2
+for (i in 2:5) counts_acc[i]<-counts_acc[i-1] + counts[i-1]/2 + counts[i]/2
+counts_all<-counts_acc[5]+counts[5]/2
+
+label_data<-tibble(label=labels,y=counts_acc,x=rep(1.6,5)) %>% mutate(angle=90-360*y/counts_all)
+
+p1<-ggplot(diamonds,aes(x=1))+geom_bar(stat="count",aes(fill=cut),width=0.5) + xlim(c(0.5,2)) +
+  geom_text(data=label_data, angle=label_data$angle, aes(label=label, x=x,y=y))
+
+p1+coord_polar(theta = "y")
+```
+
+
+```{r}
+library(tidyverse)
+library(scales)
+
+name<-c("司法界","商人","外交领域","军人","记者","经济学家","医学界","学术界","工程师")
+label<-factor(name,levels=name,order=T)
+percent<-c(0.196,0.166,0.126,0.107,0.083,0.083,0.082,0.078,0.072)
+mydata<-data.frame(label,percent)
+
+mydata$anti_percent<-1-mydata$percent
+mydata1<-gather(mydata,index,Percent,-label)
+
+conservation_status <-paste0(name,"\n",percent(percent))
+names(conservation_status)<-name
+global_labeller <-labeller(.defalut=label_value,label=conservation_status)
+
+ggplot()+
+  geom_col(data=mydata1,aes(x=1,y=Percent,fill=index),width=.2)+
+  scale_fill_manual(values=c("percent"="#00A0E9","anti_percent"="#EAEBEB"),guide=FALSE)+
+  xlim(0.6,1.1)+
+  coord_polar(theta="y")+
+  facet_grid(.~label,labeller=global_labeller)+
+  theme_minimal()+
+  theme(
+    line=element_blank(),
+    axis.text=element_blank(),
+    title=element_blank(),
+    panel.spacing=unit(0,"cm"),
+    strip.text=element_text(size=12,lineheight=1.2),
+    plot.margin=unit(c(.5,3,0,2),'lines')
+  )
+```
+
+
+```{r}
+mydata<-data.frame(
+  id=1:13,
+  class=rep_len(1:4, length=13),
+  Label=c("Events","Lead List","Partner","Markeiting & Advertising","Tradeshows","Paid Search",
+          "Webinar","Emial Campaign","Sales generated","Website","Other",
+          "Facebook/Twitter/\nOther Social","Employee & Customer\nReferrals"),
+  Value=c(7.6,15.5,17.9,21.8,29.6,29.7,32.7,43.0,57.5,61.4,67.4,68.6,68.7)
+)
+
+library(ggplot2)
+ggplot()+
+  geom_col(data=mydata,aes(x=id,y=Value/2+150,fill=factor(class)),colour=NA,width=1)+
+  geom_col(data=mydata,aes(x=id,y=150-Value/2),fill="white",colour="white",width=1)+
+  geom_line(data=NULL,aes(x=rep(c(.5,13.5),2),y=rep(c(126,174),each=2),group=factor(rep(1:2,each=2))),linetype=2,size=.25)+
+  geom_text(data=mydata,aes(x=id,y=ifelse(id<11,160,125),label=Label),size=3.5,hjust=0.5)+
+  geom_text(data=mydata,aes(x=id,y=ifelse(id<11,185,150),label=paste0(Value,"%")),hjust=.5,size=4.5)+
+  scale_x_continuous(limits=c(0,26),expand=c(0,0))+
+  coord_polar(theta = "x",start=-14.275, direction = 1)+
+  scale_fill_manual(values=c("#31A2CE","#DDB925","#3F9765","#C84F44"),guide=FALSE)+
+  theme_void()
+```
+
+
+玫瑰图
+
+参考：[仿制效果最好的疫情玫瑰图](https://www.sohu.com/a/380864496_609133)
+```{r}
+dat <- data.frame(id = 1:26, height = c(seq(100, 550, 20), seq(650, 700, 20))) %>%
+  mutate( label = case_when( id <= 13 ~ paste0(height, "例 ", LETTERS[id], "国"),
+                             id <= 21 ~ paste0(height, "例n", LETTERS[id], "国"),
+                             T ~ paste0(LETTERS[id], "国n", height, "例") ) )
+
+p1 <-ggplot(data = dat, aes(x = id, y = height, label = label)) +
+  geom_col(aes(fill = id), width = 1, size = 0) +
+  geom_col(aes(y = 40),fill = "white",width = 1,alpha = 0.2,size = 0) +
+  geom_col(aes(y = 20),fill = "white",width = 1,alpha = 0.2,size = 0)
+
+p2 <-p1 + coord_polar() + theme_void() + scale_y_continuous(limits = c(-60, 701))
+
+p3 <-p2 +geom_text(data = . %>% filter(id <= 13),nudge_y = 80,angle = 95 - 180 * c(1:13) / 13,fontface = "bold") +
+  geom_text(data = . %>% filter(between(id, 14, 21)),nudge_y = -55,nudge_x = -0.1,color = "white",fontface = "bold") +
+  geom_text(data = . %>% filter(id >= 22),nudge_y = -50,color = "white",angle = 80 - 75 * c(1:5)/5,fontface = "bold")
+
+p3 +scale_fill_gradientn(colors = c("#54778f", "#4EB043", "#E69D2A", "#DD4714", "#A61650"),guide = F)
+```
+
+参考：[使用ggplot2绘制风玫瑰图（南丁格尔玫瑰图）](https://www.jianshu.com/p/11bbfc25b30e)。  
+
+```{r}
+data_rose <- read.csv('D:\\data_work\\R_sources\\my_code\\data\\data_rose.csv')
+data_rose$country <- factor(data_rose$country, levels = data_rose$country) #排序国家
+data_rose$angle = 1:30 * 360/30
+
+library(ggplot2)
+ggplot(data_rose, aes(country,cum_confirm, fill = cum_confirm)) + 
+  geom_col(width = 1, color = 'white') + 
+  geom_col(aes(y = I(6)), width = 1, alpha = 0.1, fill = 'white') +
+  geom_col(aes(y = I(4)), width = 1, alpha = 0.3, fill = 'white') +
+  geom_col(aes(y = I(2)), width = 1, color = 'white', fill = 'white') + #画空心白
+  scale_y_continuous(trans = 'log') +
+  scale_fill_gradientn(colors = c("#31ABDC", "#4EB043", "#E69D2A", "#DD4714", "#A61650"), trans = 'log') + 
+  geom_text(aes(label = paste(paste(country, cum_confirm, sep = '\n'), '例', sep = '\n'), 
+                y = cum_confirm * 0.35, angle = angle-5), 
+            data = subset(data_rose, cum_confirm > 2000), 
+            color = "white", fontface="bold", size = 2) +
+  geom_text(aes(label = paste(paste(cum_confirm,'例', sep = ''), country, sep = '\n'), 
+                y = cum_confirm * 0.5), 
+            data = subset(data_rose, cum_confirm < 2000 & cum_confirm > 700), 
+            color = "white", fontface="bold", size = 1.6) +
+  geom_text(aes(label = paste0(cum_confirm, '例',country), angle = angle+85), 
+            nudge_y = 1.5, 
+            data = subset(data_rose, cum_confirm < 700), 
+            fontface="bold", size = 2) +
+  coord_polar(direction=-1) + theme_void() + theme(legend.position="none")
+
+# ggsave(filename = 'Figure2.png', path = 'C:/Users/sheng/Desktop', width = 8, height = 5, dpi = 900) 
+```
+
+另外，还可参考：[ggplot2玫瑰图案例](https://zhuanlan.zhihu.com/p/29157375)（虽然文中数据已经拿不到了，可以参考一下代码）。  
+此外，还有矩阵气泡图：[仿经济学人——矩阵气泡图](https://zhuanlan.zhihu.com/p/29328848)
+
+再看一个图
+
+<img src="D:/data_work/R_sources/my_code/Plots/matirx_scatter.png"></img>
+
+下面的代码可以作出上面这个图
+```{r,eval=FALSE}
+mydata<-data.frame(
+  China=c(30,8,6,7,14,11,22,3),
+  SouthKorea=c(15,6,3,5,16,14,19,22)
+)
+
+#China组的矩形数据：
+start_xmin<-seq(from=15,by=10,length=8)
+end_xmax<-seq(from=45,by=10,length=8)
+start_ymin<-cumsum(c(0,mydata[1:7,"China"]))
+end_ymax<-cumsum(mydata[,"China"])
+
+mynewdata<-data.frame(start_xmin,end_xmax,start_ymin,end_ymax)
+mynewdata$label_x<-mynewdata$start_xmin+15
+mynewdata$label_y<-mynewdata$start_ymin+mydata$China/2
+
+start_xmin<-seq(from=115,by=10,length=8)
+end_xmax<-seq(from=145,by=10,length=8)
+start_ymin<-cumsum(c(0,mydata[1:7,"SouthKorea"]))
+end_ymax<-cumsum(mydata[,"SouthKorea"])
+#计算中心点位置
+data1<-data.frame(start_xmin,end_xmax,start_ymin,end_ymax)
+data1$label_x<-data1$start_xmin+15
+data1$label_y<-data1$start_ymin+mydata$SouthKorea/2
+
+mynewdata<-rbind(mynewdata,data1)
+mynewdata$value<-c(mydata$China,mydata$SouthKorea)
+
+label=rep(c("Food,beverages & tobacco","Clothing & footwear","Household & services","Health","Transport & communications","Leisure & education","Housing & household fuels","Others"),2)
+mynewdata$label<-label
+mynewdata$label<-factor(mynewdata$label,levels=mynewdata$label[1:8],ordered=T)
+
+library("ggplot2")
+library("grid")
+library("showtext")
+library("Cairo")
+
+ggplot(mynewdata)+
+  geom_rect(aes(xmin=start_xmin, xmax =end_xmax, ymin =start_ymin, ymax =end_ymax,fill=label))
+
+palette<-c("#007990","#68C1C7","#EBEBDF","#6DA091","#AAC4B9","#761618","#249BB3","#848587")
+
+CairoPNG(file="../../Plots/matirx_scatter.png",width=1200,height=600)
+showtext.begin()
+ggplot(mynewdata)+
+  geom_rect(aes(xmin=start_xmin, xmax =end_xmax, ymin =start_ymin, ymax =end_ymax,fill=label))+
+  geom_text(aes(x=label_x,y=label_y,label=paste0(value,"%")),family="myfont",size=6)+
+  scale_y_continuous(limits=c(0,110),breaks=seq(0,100,10),label=seq(0,100,10))+
+  scale_fill_manual(values=palette)+
+  guides(fill=guide_legend(title=NULL,nrow=2)) +
+  labs(title="Composition of nominal consumption per head in China and South Korea,2015",
+       subtitle="(% of total)",
+       caption="Sources:National Bureau of Stistics; The Economist Intelligence Unit.")+
+  theme_void(base_family="myfont",base_size=20) %+replace%
+  theme(
+    plot.title=element_text(size=25,hjust=0,lineheight=1.2),
+    legend.position=c(0.60,.95),
+    plot.caption=element_text(hjust=0),
+    axis.ticks.y=element_line(),
+    axis.ticks.length=unit(0.5,'cm'),
+    plot.margin=margin(1,1,1,1,unit="cm"),
+    axis.text=element_text(),
+    axis.text.x=element_blank(),
+  )
+showtext.end()
+dev.off()
+```
+
+还有几个有意思的图：
+
+<img src="D:/data_work/R_sources/my_code/Plots/polar_1.PNG"></img>
+
+实现方法可参考：[仿网易数独玫瑰气泡图](https://zhuanlan.zhihu.com/p/27722090)
+
+<img src="D:/data_work/R_sources/my_code/Plots/polar_2.PNG"></img>
+
+实现方法可参考：[仿网易数独圆环条形图](https://zhuanlan.zhihu.com/p/26533202)
+
+<img src="D:/data_work/R_sources/my_code/Plots/polar_3.PNG"></img>
+
+实现方法可参考：[仿ECO事件圆环图](https://zhuanlan.zhihu.com/p/26362063)
+
+<img src="D:/data_work/R_sources/my_code/Plots/polar_4.PNG"></img>
+
+实现方法可参考：[北京历史天气可视化](https://zhuanlan.zhihu.com/p/26361840)
+
+<img src="D:/data_work/R_sources/my_code/Plots/polar_5.PNG"></img>
+
+实现方法可参考：[ggplot环形字体地图](https://zhuanlan.zhihu.com/p/26289213)
+
+<img src="D:/data_work/R_sources/my_code/Plots/bar_1.PNG"></img>
+
+实现方法可参考：[重要的是图表思维，而不是工具](https://zhuanlan.zhihu.com/p/27613536)
+
+<img src="D:/data_work/R_sources/my_code/Plots/area_1.PNG"></img>
+
+实现方法可参考：[面积（区域）图及其美化](https://zhuanlan.zhihu.com/p/27346230)
+
+<img src="D:/data_work/R_sources/my_code/Plots/boxplot_1.PNG"></img>
+
+实现方法可参考：[箱线图及其美化技巧](https://zhuanlan.zhihu.com/p/27348126)
+
+太极图，可参考：[用ggplot轻松搞定太极图](https://zhuanlan.zhihu.com/p/26880736)
+
+甘特图，可参考：[ggplot2构造绩效跟踪的甘特图](https://zhuanlan.zhihu.com/p/26669963)
+
+商业瀑布图，可参考：[ggplot2构造瀑布图](https://zhuanlan.zhihu.com/p/26654503)
+
+子弹图，可参考：[ggplot2制作目标评价的子弹图](https://zhuanlan.zhihu.com/p/26523273)
+
+线条比较图（多个半圆相同起点不同终点）, 可参考：[R语言仿一财经典线条比较图](https://zhuanlan.zhihu.com/p/26462125)
+
+这个知乎博主里还有一些不错的可视化介绍，可以参考下：[那些年倒腾的R语言学习笔记，全都在这里了](https://zhuanlan.zhihu.com/p/28131878)
+
+
+### 未命名
+
+母子图，本质上是图片的排版任务.
+
+```{r}
+library(ggplot2)
+library(grid) 
+chart1<-ggplot(diamonds,aes(carat,price,colour=cut))+geom_point()+
+  theme(legend.position=c(0.9,0.72),legend.background=element_rect(I(0)))
+chart1
+vie<-viewport(width=0.669,height=0.4,x=0.7,y=0.306)
+chart2 <-ggplot(diamonds,aes(depth,fill=color))+geom_histogram()+xlim(54,70) +
+  theme(axis.text.y=element_text(face="bold",colour="black"),
+        axis.title.y=element_blank(),
+        axis.text.x=element_text(face="bold",colour="black"),
+        plot.background=element_rect(I(0),linetype=0),
+        panel.background=element_rect(I(0)),
+        panel.grid.major=element_line(colour=NA),
+        panel.grid.minor=element_line(colour=NA),
+        legend.background=element_rect(I(0),linetype=1),
+        legend.position=c(0.85,0.72))
+print(chart2,vp=vie)
+```
+
+鱼缸图 
+摘自：[鱼缸式百分比比较信息图](https://zhuanlan.zhihu.com/p/26385986)
+
+```{r,fig.height=3.6}
+library(tidyverse)
+require(grid)
+library(Rmisc)
+px1<-seq(from=0,to=10,length=1000)
+py1<-sqrt(5^2-(px1-5)^2)
+
+Project1x<-c(px1,rev(px1))
+Project1y<-c(py1,-py1)
+Project1<-data.frame(lon=Project1x,lat=Project1y)
+Project1$group<-"ProjectA"
+Project1$order<-1:nrow(Project1)
+
+Project2<-data.frame(lon=Project1x+15,lat=Project1y)
+Project2$group<-"ProjectB"
+Project2$order<-1:nrow(Project2)
+
+Project3<-data.frame(lon=Project1x+30,lat=Project1y)
+Project3$group<-"ProjectC"
+Project3$order<-1:nrow(Project3)
+
+Project4<-data.frame(lon=Project1x+45,lat=Project1y)
+Project4$group<-"ProjectD"
+Project4$order<-1:nrow(Project4)
+
+Project5<-data.frame(lon=Project1x+60,lat=Project1y)
+Project5$group<-"ProjectE"
+Project5$order<-1:nrow(Project5)
+
+Project<-rbind(Project1,Project2,Project3,Project4,Project5)
+# ggplot(Project)+geom_path(aes(lon,lat,group=group))
+
+Proj1<-Project1[,1:2]%>%filter(lat<=-4)
+Proj1[nrow(Proj1)+1,]<-c(8,-4)
+Proj1$group<-"ProjA"
+Proj1$order<-1:nrow(Proj1)
+
+Proj2<-Project2[,1:2]%>%filter(lat<=-3)
+Proj2[nrow(Proj2)+1,]<-c(24,-3)
+Proj2$group<-"ProjB"
+Proj2$order<-1:nrow(Proj2)
+
+Proj3<-Project3[,1:2]%>%filter(lat<=0)
+Proj3[nrow(Proj3)+1,]<-c(40,0)
+Proj3$group<-"ProjC"
+Proj3$order<-1:nrow(Proj3)
+
+Proj4<-Project4[,1:2]%>%filter(lat<=3)
+Proj4$group<-"ProjD"
+Proj4$order<-1:nrow(Proj4)
+
+Proj5<-Project5[,1:2]%>%filter(lat<=4)
+Proj5$group<-"ProjE"
+Proj5$order<-1:nrow(Proj5)
+
+Projdata<-rbind(Proj1,Proj2,Proj3,Proj4,Proj5)
+
+labeldata<-data.frame(x=seq(from=5,to=65,length=5),y=c(-4,-3,0,3,4),label=sprintf("%2d%%",c(10,20,50,80,90)))
+
+p1<-ggplot()+
+  geom_polygon(data=Projdata,aes(x=lon,y=lat,group=group),fill="#92D24F",col=NA)+
+  geom_path(data=Project,aes(x=lon,y=lat,group=group),col="black",size=1.2)+
+  geom_text(data=labeldata,aes(x=x,y=y+1,label=label),hjust=.5)+
+  scale_x_continuous(breaks=labeldata$x,labels=paste0("Project",LETTERS[1:5]))+
+  ylim(-5.5,6)+
+  theme_minimal()+
+  theme(
+    panel.grid=element_blank(),
+    axis.title=element_blank(),
+    axis.text.y=element_blank(),
+    plot.margin = unit(c(.2,.2,1,.2), "cm")
+  )
+
+p2<-ggplot()+
+  geom_polygon(data=Projdata,aes(x=lon,y=lat,group=group),fill="#FFC000",col=NA)+
+  geom_path(data=Project,aes(x=lon,y=lat,group=group),col="black",size=1.2)+
+  geom_text(data=labeldata,aes(x=x,y=y+1,label=label),hjust=.5)+
+  scale_x_continuous(breaks=labeldata$x,labels=paste0("Project",LETTERS[1:5]))+
+  ylim(-5.5,6)+
+  theme_minimal()+
+  theme(
+    panel.grid=element_blank(),
+    axis.title=element_blank(),
+    axis.text.y=element_blank(),
+    plot.margin = unit(c(.2,.2,1,.2), "cm")
+  )
+
+grid.newpage()
+pushViewport(viewport(layout=grid.layout(2,2)))
+vplayout <- function(x,y){viewport(layout.pos.row = x, layout.pos.col = y)}
+print(p1,vp=vplayout(1,1:2))
+print(p2,vp=vplayout(2,1:2))
+
+library(gridExtra)
+library("plyr")
+library("lattice")
+multiplot(p1,p2,layout=matrix(c(1,1,2,2),nrow=2,byrow=TRUE))
+
+```
+
+### 箱式图系列
+
+分组箱式图  
+
+万一有时候一时卡住了，可以参考下这个：[同一数据多变量分组的boxplot](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247485019&idx=1&sn=7ec417dc7a35b259526f7afb622213e2&chksm=ec43b71cdb343e0a9bfff7d9330c3ec58754eb6f25309389327e8d774105ef0a4b16ba66c85d&mpshare=1&scene=1&srcid=0422EXQsMgrgMWM4wFdHXicr&sharer_sharetime=1587496877025&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=5a373e833a8cf09c0fd969cc4bc5af3594c31298d252fb87122778aa397d39f36d69212a2d369e4f0e05078f315e7178caebf09c5d481dc165c423af187b50c3e313448a8797544c78c177e91af6af12&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AfmnOpfhYjF75QEsXRey0zA%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+以及，组内再分组方法，可参考：[画点之组内再分组](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247487599&idx=1&sn=87e7a2a3fd47ec354c3b83f02087cc7b&chksm=ec43a128db34283eb22ecba688c35bb4ce8fb5b42698e1bcbeca2d168f629fcbbb044b9c348d&mpshare=1&scene=1&srcid=0422zGdmPnlliOZuxi69k4SU&sharer_sharetime=1587791523246&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=b057c75bc90186ba5af1b2071f8080a92b9087e6c6584e7a36c6d2fc02a18f74b764f99b8223c3a40df15dbc824b887368380f9035e6a19d73be1259e97f53222f871a3647cba951051f73d757695170&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AZRc3Lorpd7hHmU%2BTNKBmc8%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+云雨图，将箱式图、点分布、核密度图结合，画成云雨的样子，可参考：[（翻）云（覆）雨图](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247486539&idx=1&sn=97ff6a0d5fe2daa2151ebae218c92fe1&chksm=ec43bd0cdb34341ae5a58cc575a111084e3bcbb4c54379ce58bad69efb0e9fe688e9c7571ad1&mpshare=1&scene=1&srcid=04259JmfOZN1bpu98mXrQctj&sharer_sharetime=1587790332406&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=5a373e833a8cf09c570d7daf09ce695f53008f829a47db28bd5affb9267e835c3127eaccd3c644b0af78dd5f520ed1bfc497195775d90a4682e4516cee62be6a37e7e752762230b95451c06be5c6e0da&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AXJpmvCr1VNuSHpUT%2B%2F2Iww%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+自己灵活确定要展示的统计量，可参考：[图层中的统计量，你自己说的算](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247487166&idx=1&sn=250ff3a666142f15b0cbbc9b54f771cb&chksm=ec43bff9db3436ef2311975fb8521f5dce25d2c393cfb3d8641e0f3c5868e9f424cd3fdbb10b&mpshare=1&scene=1&srcid=0422Ju6h5iX8lRA6VuAt1KuE&sharer_sharetime=1587791658924&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=111d5d7ed497d5967a3d344c24a2a19e5d4097354f773083554d50b8cc77f38a62513d95d2382a4e00da58754dc99ba8f38e1a992d557ad5539ab763c413826263a807c451050c9bb3dacad17b819a13&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=Acy3AWXwT%2FjWBXzby75oHzE%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+
+### 图中文本太长的处理
+
+可参考：[ggplot2画图，文本太长了怎么办](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247487148&idx=1&sn=10b850e00e058be3ace71a2826151d11&chksm=ec43bfebdb3436fde3971865b2c3f3d5e26bbc7805965831bb5ee88e15064115034a91db525b&mpshare=1&scene=1&srcid=0422iaZRGvaMmAFFBHvFPXXQ&sharer_sharetime=1587793129403&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=b057c75bc90186ba902564e2fad3872c574ea1288cceef499d7e1934756a08ac9fd7bd2d52e14684789c7b2c02e903a5e403f2a7883fe51d4028c0f4c654b0e393899d93a69f5df7ca511e9cc5d0af55&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AUpXVUHs1wqgYsODudiEm0M%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+以及[活人不能让尿憋死，自动出来的图例不好调？自己徒手画一个](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247488789&idx=1&sn=7201836b0355cfb8648c59707de24a55&chksm=ec43a452db342d447138bbc82a3134c469f785ea52d5738a5b25fca9f981eae0e495a6e4e065&mpshare=1&scene=1&srcid=0422KvDN5Hw6ZiGU1IQmnGrZ&sharer_sharetime=1587497087220&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=5a373e833a8cf09ca7fa903ccd115d3b17bbbfe718fd25ce907c5ff68f72949af23bb5a1f5b1a67a44d40cfe0cbea626734a05cde37b5f019b7f9ca1ed928290f8d9af0479e2a8807b19a17796bb5b0d&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AbHD6xJHjJGtxvoKFswbaW0%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+### 矩阵气泡图
+
+除了下面的方法实现外，还有个包叫ggbubbles可以直接实现。
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+df<-tibble(type=sort(rep(LETTERS[1:9],6)),class=rep(as.character(c(1:6)),9),value=rnorm(54,10,20))
+
+ggplot(df,aes(type,class)) +
+  geom_point(aes(size=value)) +
+  theme_minimal() +
+  xlab(NULL) + ylab(NULL)
+```
+
+### 山峰图
+
+使用R包ggridges轻松搞定。可参考：[ggridges：一种波涛汹涌，哦不对，是山峰叠峦的可视化方式](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247486156&idx=2&sn=9e2996d02ae1e17bd31960a11e6d87ac&chksm=ec43bb8bdb34329de6ef433c8098c57a40e2f820c61bd8d7b96bcd483def613f7eb470014ff2&mpshare=1&scene=1&srcid=0425J0FqMpwuOq7GmiUzzrrz&sharer_sharetime=1587800474628&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=cac8859db214b54292899af514b9c5ad90ce1aa49b4e0055088011c37b10a3766a3caf4f4ba88b7032f79cf32da5c4c505a027f69863f508420a147a04b8f910d036a156ea8d95fa31ea0c9506f6ef5c&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AXDVCzkBucRi%2FFXCCPEv63w%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+```{r}
+library(ggplot2)
+library(ggridges)
+
+ggplot(diamonds) + 
+  aes(x = carat, y = clarity, color = clarity, fill = clarity) + 
+  geom_density_ridges(alpha = 0.75) + 
+  theme_ridges()
+```
+
+
+### 交互式注释ggplot
+
+可参考：[可交互注释你的ggplot图](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247488999&idx=1&sn=eda2cc40b62b812822a81292805740ad&chksm=ec43a4a0db342db6d120bae49ff08d4d445734bb4dc79cb2d2009a5429b886615f32e9f28210&mpshare=1&scene=1&srcid=0422myH6o8WQse5iSnsAJiQG&sharer_sharetime=1587793272161&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=b057c75bc90186bab321b7ccad799340786fcfb55a8db0bb74b7bd5606eba3e4b17df6481dde2780c841efdced4a469f77d9054d35b680222b180eaa89f0b5d367ddedead6cdea11afc9f6cfd86c377c&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AatBKW3D%2Bt4m8HXsDWGNbsw%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+### ggplot主题系统
+
+可参考：[不需要花时间去学ggplot2主题系统](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247486024&idx=1&sn=6a34900c759327755e3fabff4713fbe6&chksm=ec43bb0fdb343219ca6d7638bdbaf4f9658cc3af4d782e0ccb834e22a2a8713f17968e0c2649&mpshare=1&scene=1&srcid=0422VoxBXDkG17llG5N9FpnO&sharer_sharetime=1587793353040&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=fcccb4241fdfb8d14a7bc13e5c591e2d3b44e8269baf537d39fc41e8a7d4f2843f0c112b5c3697ffbc11ddf641a85b3ad2fb36d119c1f39c4ce34b9a5d74fa986d63e018f469a3e52a0e116bfaf92825&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AUTl15ihN9BY0HyBjvMLlrc%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+
+## ggtree
+
+```{r}
+library("treeio")
+library("ggtree")
+nwk <- system.file("extdata", "sample.nwk", package="treeio")
+tree <- read.tree(nwk)
+
+ggplot(tree, aes(x, y)) + geom_tree() + theme_tree()
+ggtree(tree, layout="circular")
+ggtree(tree, layout="fan", open.angle=120)
+ggtree(tree, branch.length='none', layout='circular')
+
+ggtree(tree, layout='circular') + xlim(-10, NA)
+ggtree(tree) + scale_x_reverse() + coord_polar(theta='y')
+#ggtree(tree) + scale_x_reverse(limits=c(10, 0)) + coord_polar(theta='y')
+```
+
+```{r}
+library("ggplot2")
+library("ggtree")
+
+nwk <- system.file("extdata", "sample.nwk", package="treeio")
+
+tree <- read.tree(nwk)
+circ <- ggtree(tree, layout = "circular")
+
+df <- data.frame(first=c("a", "b", "a", "c", "d", "d", "a", "b", "e", "e", "f", "c", "f"),
+                 second= c("z", "z", "z", "z", "y", "y", "y", "y", "x", "x", "x", "a", "a"))
+
+rownames(df) <- tree$tip.label
+
+p1 <- gheatmap(circ, df[, "first", drop=F], offset=.8, width=.1,
+               colnames_angle=90, colnames_offset_y = .25)
+p2 <- gheatmap(p1, df[, "second", drop=F], offset=5, width=.1,
+               colnames_angle=90, colnames_offset_y = .25)
+
+require(RColorBrewer)
+col <- c(brewer.pal(5, "Dark2"), brewer.pal(4, "Pastel1"))
+names(col) = c(letters[1:6], letters[24:26])
+
+pp <- p2 + scale_fill_manual(values=col)
+# print(pp)
+
+p1x <- p1 + scale_fill_manual(values=col)
+p2x <- gheatmap(circ, df[, "second", drop=F], offset=5, width=.1) +
+  scale_fill_manual(values=col) 
+
+require(cowplot)
+leg1 <- get_legend(p1x)
+leg2 <- get_legend(p2x)
+
+pp <- pp + theme(legend.position="none")
+plot_grid(pp, leg1, leg2, ncol=3, rel_widths=c(1, .1, .1))
+```
+
+
+## 3D和D3
+
+### r2d3
+
+如下图的代码都很简单（rstudio版本需达到v1.2），可参考：[r2d3](https://rstudio.github.io/r2d3/articles/gallery/bullets/)
+
+<img src="D:/data_work/R_sources/my_code/Plots/bullets_1.PNG"></img>
+
+<img src="D:/data_work/R_sources/my_code/Plots/circlepacking_1.PNG"></img>
+
+<img src="D:/data_work/R_sources/my_code/Plots/polar_6.PNG"></img>
+
+<img src="D:/data_work/R_sources/my_code/Plots/polar_7.PNG"></img>
+
+<img src="D:/data_work/R_sources/my_code/Plots/bar_2.PNG"></img>
+
+### 3D系列
+
+有一些不错的画3D图的包，具体可参考：[plot3d](http://www.rforscience.com/rpackages/visualisation/plot3d/)、[plot3Drgl](https://cran.r-project.org/web/packages/plot3Drgl/vignettes/plot3Drgl.pdf)
+
+## 其他
+
+水果味道主题：ggpomological包
+
+```{r,warning=FALSE,message=FALSE}
+library(ggpomological)
+library(dplyr)
+
+basic_iris_plot <- ggplot(iris) +
+  aes(x = Sepal.Length, y = Sepal.Width, color = Species) +
+  geom_point(size = 2)
+
+basic_iris_plot <- basic_iris_plot + scale_color_pomological()
+
+basic_iris_plot + theme_pomological()
+
+# basic_iris_plot + theme_pomological_plain() 
+# 
+# pomological_iris <- basic_iris_plot + theme_pomological_fancy()
+# pomological_iris
+# 
+# paint_pomological(pomological_iris, res = 110) %>% 
+#   magick::image_write(set_filename("plot-demo-painted.png"))
+```
+
+
+mathart包，可以画一些有趣的图案，可参考:[mathart：一个富有逼格的R包](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247485910&idx=1&sn=55b546f34390a239f2e2e3eb5b30ef8c&chksm=ec43b891db3431873a8f0d250efaf0e2fcc8becbbb269c8b4727573640e42d752a3a4f4b4cd8&mpshare=1&scene=1&srcid=04221rYI0T4iRrNYq8TQvQ30&sharer_sharetime=1587794105610&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=f77084c7bd8d613f4bf6e65873748f5fef40da30cef69360422d5c441a3845673531bf156dc3860e7e474c3b0a4af7e1b05aa5ef95154b83d504d607c8692a0a9baab1e9a9ad2ddb7565078e9a9adf07&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AUry7VD84q8eOf5QFV9BIoQ%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+ggimage包，可以在ggplot中灵活地添加图片，构成geom_image图层，可参考：[ggimage：ggplot2中愉快地使用图片](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247484164&idx=1&sn=030612f5a84120ef407401ff6fad715f&chksm=ec43b243db343b5524c911327bdcbe5f01034095d549d43d530decc5676faecdbd449dfac026&mpshare=1&scene=1&srcid=0425ipWAy4Rn51L9E6grhEvE&sharer_sharetime=1587796225323&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=f77084c7bd8d613f5cb0252864798e3ab48ebda5ea6f2b9a8764f215ae623feee7b191fa2ca5575cc9a48f993303542edb9d6e6f1a5bdcda22355bfad13a21ac785dce08a94b8ddedfa698fd2ffe2864&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AUMWP2Wzt6liNpgaI3KDNcE%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+灵活画各种图案，比如画蛋糕，画爱心等等，可参考：[画蛋糕](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247485240&idx=1&sn=8711bb99fe5a2922227e03399cbd8c73&chksm=ec43b67fdb343f69382235da3b7b74a9c40eebac4f1ebf9b8d13ee51fbf5656ff0c427906cf1&mpshare=1&scene=1&srcid=0425MbPoo1PYo4QUthHi8erP&sharer_sharetime=1587796617649&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=b057c75bc90186bab5459de8b7aa0070d0bd86d6251941051b0c4c76c6e2f69c9ef9e21870fbd062f577f81e5968995a983b520cfa37e2400267fa3ff2a0dded56e11a36808d2baafcf831dc7c44a764&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AVLgLk%2BFfk8Mzcq3hVmxDhI%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+主成分分析灵活画圈圈，可参考：[画个小圈圈](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247485343&idx=1&sn=81805d75eb0a05e15594ee7f7bc92d41&chksm=ec43b6d8db343fce343be9525d1da97ed17c8e4428e9f60cd010308382fdc838bffc56aece06&mpshare=1&scene=1&srcid=0425lMj9edJ00Da5TcEhWDT4&sharer_sharetime=1587796680200&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=111d5d7ed497d59665e70d71985dcab21a7793ab257fd9e5fd7002dba99e1accdcf910b1bf5b6c04e255880117bba544fe0250fce399e0c5829dd9932423750dc27a51ce4f39bb4ae875997ebd8970bd&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AXshWZNGIVW64Q5%2B0XPzAiw%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+生存六边形logo，可参考：[就是这么简单，你也能够纯代码生成六角贴](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247485913&idx=1&sn=3f71c4142415b12c5115b25836f3b890&chksm=ec43b89edb34318822024bb549198e8bc99832c0707575066118f17be80ac185ce06edc26ef4&mpshare=1&scene=1&srcid=0425cE5EOJdXEQ1z341CNWIw&sharer_sharetime=1587797295486&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=b057c75bc90186ba838a55884362817ab13a85a2cfcfc07f043ad4b22cb88a5ef594c00201813bdf08cde68f5ce3200375868f069637a437f6d261bdf4b7196624682387be6e339511efb3bbf37259ce&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AVoXckedIqKTfJyQl39VFjU%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+```{r}
+library(hexSticker)
+sticker(
+  package = "flxr",                     # package name to display on sticker             
+  p_size = 24,                          # size of package name
+  p_y = 1.5,                            # y of package name
+  p_color = "#C9B128",                  # color of package name
+  subplot = "D:\\data_work\\R_sources\\my_code\\Plots\\hexSticker_baseplot.png", # sticker feature
+  s_x = 1.085,                          # x of feature
+  s_y = .8,                             # y of feature
+  s_width = .48,                        # width of feature - maintains aspect ratio
+  h_size = 2,                           # border
+  h_color = "#C9B128",                  # color of border
+  h_fill = "black",                     # color of background
+  url = "github.com/markroepke/flxr",   # url at the bottom
+  u_color = "white",                    # color of url at the bottom
+  u_size = 3.5,                         # size of url at the bottom
+  filename = "D:\\data_work\\R_sources\\my_code\\Plots\\flxr.png"     # location to save the image
+)
+```
+
+更新包： 一键更新所有R包，可使用工具包rvcheck，可参考：[一键更新所有R包](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247488198&idx=1&sn=7f6c142ddcb674217e13005164d58845&chksm=ec43a381db342a978b903b6502fbc78b8560a901dbcffaa83906f75225fe71c8b96c630d4dac&mpshare=1&scene=1&srcid=0425j4Wwjt8ayyIuCG3venzU&sharer_sharetime=1587798166784&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=5a373e833a8cf09c6a42956a14fe8718814be42abd6a6df677f081c6688db77b87ca82293bb70356cd96d2740661202d4aec5a9ae152ffffe761f652ec8597366d120593ac9318dfde00d075a576311e&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AdJobQitseqeJT9WnCIkxZk%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)

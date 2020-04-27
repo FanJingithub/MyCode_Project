@@ -1,0 +1,49 @@
+---
+title: "dashboard_2"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+setwd("D:\\data_work\\R_sources\\my_code\\temp")
+library(flexdashboard)
+```
+Page 1 {data-navmenu="Menu A"}
+=====================================
+```{r}
+library("ggplot2")
+ggplot(aes(x=mpg, y=wt), data = mtcars) +
+  geom_point()+
+  geom_smooth()
+```
+
+Page 2 {data-navmenu="Menu A"}
+=====================================  
+```{r}
+wdata <- data.frame(
+  sex=factor(rep(c("F", "M"), each=200)),
+  weight=c(rnorm(200, 55), rnorm(200, 58))
+)
+ggplot(data = wdata,aes(x = weight, fill=sex)) +
+  geom_histogram()
+```
+
+
+Page 3 {data-navmenu="Menu B"}
+=====================================
+```{r}
+ggplot(mpg, aes(displ, hwy, colour = class)) + 
+  geom_point()
+```
+
+Page 4 {data-navmenu="Menu B"}
+===================================== 
+```{r}
+library(plyr)
+mu <- ddply(wdata, "sex", summarise, grp.mean=mean(weight))
+ggplot(wdata, aes(x=weight)) +
+geom_area(aes(fill=sex), stat = "bin", alpha=0.6)+
+  theme_classic()
+```

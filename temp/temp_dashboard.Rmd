@@ -1,0 +1,45 @@
+---
+title: "flexdashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+setwd("D:\\data_work\\R_sources\\my_code\\temp")
+library(flexdashboard)
+```
+
+Column 
+--------------------
+### Chart 1
+ 
+```{r}
+library("ggplot2")
+wdata <- data.frame(
+  sex=factor(rep(c("F", "M"), each=200)),
+  weight=c(rnorm(200, 55), rnorm(200, 58))
+)
+ggplot(data = wdata,aes(x = weight, fill=sex)) +
+  geom_histogram()
+
+```
+ 
+Column {.tabset}
+-------------------------------------
+
+### Chart 2
+
+```{r}
+ggplot(aes(x=mpg, y=wt), data = mtcars) +
+  geom_point()+
+  geom_smooth()
+```
+
+### Chart 3
+
+```{r}
+ggplot(mpg, aes(displ, hwy, colour = class)) + 
+  geom_point()
+```

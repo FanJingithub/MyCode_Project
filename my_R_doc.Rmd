@@ -1,0 +1,946 @@
+---
+title: "R代码合集"
+author: "Fan"
+date: "2020年4月12日"
+output: 
+  html_document: 
+    theme: cerulean
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,cache = T)
+setwd("D:\\data_work\\R_sources\\my_code")
+my_colors = c("royalblue","firebrick1","#FF9966","#66CC99","white","66CCCC","#3399CC")
+```
+
+## 简介
+
+本文档记录一些实用的R代码
+</br>
+</br>
+&nbsp;
+
+## 基本操作
+```{r tibble,message=FALSE,warning=FALSE}
+library(dplyr)
+library(purrr)
+library(kableExtra)
+# extended summary for tibble
+my_summary_tibble<-function(data,fun){ return( map(data,fun) %>% unlist() %>% as.vector() ) }
+
+# transpose for tibble
+my_t_tibble<-function(data,name,id){
+  temp<-t(data[,-which(colnames(data)==name)])
+  colnames(temp)<-data[name] %>% unlist() %>% as.vector()
+  return(as_tibble(temp,rownames=id))
+}
+
+xx<-tibble(name=letters[1:5],x=c(1:5),y=rnorm(5,mean=0,sd=1),z=sample(5,5))
+xx %>% modify_at(c("y"),function(x) round(x,2)) %>% 
+  kable() %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+xx.summary<-tibble(id=colnames(xx)[-1],
+                   mean=my_summary_tibble(xx[,-1],mean),
+                   sd=my_summary_tibble(xx[,-1],sd),
+                   sum=my_summary_tibble(xx[,-1],sum))
+xx.summary %>% modify_at(c(-1),function(x) round(x,2)) %>%
+  kable() %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+xx.transpose<-my_t_tibble(xx,name="name",id="id")
+xx.transpose%>% modify_at(c(-1),function(x) round(x,2)) %>%
+  kable() %>% kable_styling(bootstrap_options = "striped", full_width = F)
+
+xx.summary.row<-tibble(id=colnames(xx.transpose)[-1],
+                       mean=my_summary_tibble(xx.transpose[,-1],mean),
+                       sd=my_summary_tibble(xx.transpose[,-1],sd),
+                       sum=my_summary_tibble(xx.transpose[,-1],sum))
+xx.summary.row %>% modify_at(c(-1),function(x) round(x,2)) %>%
+  kable() %>% kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+
+## 可视化
+### 每个病例的参数概览图（包括分类变量）
+本来打算使用空矩阵构建热图来完成此需求，然而在空矩阵的情况下，图例放在下方会出现图例位置过度上移，
+导致图片的重叠，尝试了很久后决定采用隐藏矩阵值且调整padding达到要求（padding参数挽救了这个“轮子”）
+```{r variable_for_each, message=FALSE, warning=FALSE}
+library(ComplexHeatmap)
+library(circlize)
+data_mat = matrix(rnorm(50,0,1), 1, 50)
+colors = colorRamp2(c(0, 1000), c("white", "red"))
+use_colors = c("#3399CC","#FF9966","#66CC99","white","66CCCC") 
+gap_wd = 3
+anno_data = data.frame(class = c(rep("0",20),rep("1",25),rep("2",5)),
+                       value = runif(50), 
+                       type_1 = rep(letters[1:2], 25),
+                       type_2 = rep(c("1","3","2","1","2"),10))
+anno_color = list(class = c("0" = use_colors[1], "1" = use_colors[2],"2" = use_colors[3]),
+                  value = colorRamp2(c(0, 1), c("white", "red")),
+                  type_1 = c("a" = use_colors[1], "b" = use_colors[2]),
+                  type_2 = c("1" = use_colors[1], "2" = use_colors[2], "3"=use_colors[3]))
+anno_params = list(legend_height = unit(1, "cm"))
+ha = HeatmapAnnotation(df = anno_data,
+                       col = anno_color,
+                       annotation_legend_param = anno_params)
+colnames(data_mat) = rep("A",50)
+heatmap_1 = Heatmap(data_mat, col = colors, column_title = "Parameters for each case",
+                    top_annotation = ha, top_annotation_height = unit(12, "mm"),
+                    cluster_rows = FALSE, cluster_columns = FALSE,
+                    show_heatmap_legend = F,
+                    show_row_names = FALSE, show_column_names = FALSE)
+draw(heatmap_1,annotation_legend_side = "bottom"
+     ,padding = unit(c(50, 20, 20, 2), "mm"))
+annotations = c("class","value","type_1","type_2")
+for (element in annotations){
+  decorate_annotation(element, {grid.text(element, unit(-2, "mm"), just = "right", gp = gpar(fontsize=8))
+    grid.lines(c(0.4, 0.4), unit(c(0, 1), "native"), gp = gpar(col = use_colors[4], lwd = gap_wd))
+    grid.lines(c(0.9, 0.9), unit(c(0, 1), "native"), gp = gpar(col = use_colors[4], lwd = gap_wd))})
+}
+```
+</br>
+</br>
+&nbsp;
+
+## 生存分析
+### 计算iAUC
+主要是使用R包risksetROC，计算的核心代码如下：
+```{r iAUC, message=FALSE, warning=FALSE}
+library(survival)
+library(risksetROC)
+library(survivalROC) # load the mayo data
+data(mayo)
+nobs <- NROW(mayo)
+survival.time <-mayo$time/365
+survival.status <- mayo$censor
+M<-mayo$mayoscore4
+## first find the estimated survival probabilities at unique failure times
+surv.prob <- unique(survfit(Surv(survival.time,survival.status)~1)$surv)
+ 
+fit0 <- coxph( Surv(survival.time,survival.status)
+               ~ M, na.action=na.omit )
+eta <- fit0$linear.predictor
+model.score <- eta
+utimes <- unique( survival.time[ survival.status == 1 ] )
+utimes <- utimes[ order(utimes) ]
+## find AUC at unique failure times
+AUC <- rep( NA, length(utimes) )
+for( j in 1:length(utimes) )
+{
+  out <- CoxWeights( eta, survival.time, survival.status,utimes[j])
+  AUC[j] <- out$AUC
+}
+## integrated AUC to get concordance measure
+iAUC <- IntegrateAUC( AUC, utimes, surv.prob, tmax=365 )
+iAUC
+```
+</br>
+&nbsp;
+
+### 时间依赖ROC的绘制
+主要使用R包timeROC和ggplot2，绘制的核心代码如下：
+```{r timeROC, message=FALSE, warning=FALSE}
+library(timeROC)
+library(ggplot2)
+library(survivalROC) # load the mayo data
+data(mayo)
+survival.time <-mayo$time/365
+survival.status <- mayo$censor
+M<-mayo$mayoscore4
+ROC.1<-timeROC(T=survival.time,
+               delta=survival.status,marker=M,
+               cause=1,weighting="marginal",
+               times=quantile(survival.time,probs=seq(0.2,0.8,0.02)),
+               iid=TRUE)
+ROC.1
+
+time_AUC<-data.frame(time=ROC.1$times,
+                     AUC=ROC.1$AUC,
+                     sd=ROC.1$inference$vect_sd_1,
+                     AUC_upper=ROC.1$AUC+ROC.1$inference$vect_sd_1,
+                     AUC_lower=ROC.1$AUC-ROC.1$inference$vect_sd_1)
+
+ggplot(time_AUC,aes(x=time,y=AUC))+
+  geom_line(colour='red')+
+  scale_y_continuous(limits = c(0.5,1))+
+  geom_ribbon(aes(ymin = AUC_lower,ymax = AUC_upper),alpha = 0.16,fill="red")+
+  theme(panel.grid.major =element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"))
+```
+</br>
+&nbsp;
+
+### 特定时间点ROC曲线绘制
+主要使用R包survivalROC和plotROC以及ggplot2，当然也可以使用timeROC的结果拿到特定时间点的ROC曲线数据进行绘制。绘制的核心代码如下：
+```{r timeROC_2, message=FALSE, warning=FALSE}
+library(survivalROC)
+library(survival)
+library(ggplot2)
+library(plotROC)
+data(mayo)
+nobs <- NROW(mayo)
+survT <-mayo$time/365
+cens <- mayo$censor
+M<-mayo$mayoscore4
+ 
+### time: 1,3,5
+sroc <- lapply(c(1, 3, 5), function(t){
+  stroc <- survivalROC(Stime = survT, status = cens, marker = M, 
+                       predict.time = t,
+                       method = "KM"  ## KM法
+                       # method = "NNE", span = .25 * 350^(-.2) ## NE法
+                       )
+  data.frame(TPF = stroc[["TP"]], FPF = stroc[["FP"]], 
+             c = stroc[["cut.values"]], 
+             time = rep(stroc[["predict.time"]], length(stroc[["FP"]])))
+})
+ 
+## combine data
+sroclong <- do.call(rbind, sroc)
+sroclong$time<-factor(sroclong$time)
+ 
+## plot ROC
+pROC<-ggplot(sroclong, aes(x = FPF, y = TPF, label = c, color = time)) + 
+  geom_roc(labels = FALSE, stat = "identity",n.cuts = 20) +
+  style_roc()+
+  ggsci::scale_color_jco()
+
+pROC+annotate("text",x = .75, y = .25, ## position of text
+           label = paste("AUC of 1 years =", round(calc_auc(pROC)$AUC[1], 2))) +
+     annotate("text",x = .75, y = .15, ## position of text
+            label=paste("AUC of 3 years =", round(calc_auc(pROC)$AUC[2], 2)))+
+     annotate("text",x = .75, y = .05, ## position of text
+            label=paste("AUC of 5 years =", round(calc_auc(pROC)$AUC[3], 2)))
+```
+</br>
+&nbsp;
+
+### 生存分析三联图
+```{r tri_plot, message=FALSE, warning=FALSE}
+library(survival)
+library(survivalROC)
+library(dplyr)
+library(ggplot2)
+library(ComplexHeatmap)
+data(mayo)
+nobs <- NROW(mayo)
+survival.time <-mayo$time
+survival.status <- mayo$censor
+M<-mayo$mayoscore4
+x3=rnorm(length(M),6,1)
+x4=rnorm(length(M),0,1)+x3
+x5=rnorm(length(M),0,1)+x3
+x6=rnorm(length(M),0,1)+x3
+surv.prob <- unique(survfit(Surv(survival.time,survival.status)~1)$surv)
+
+fit0 <- coxph( Surv(survival.time,survival.status)
+               ~ M, na.action=na.omit )
+fp <- fit0$linear.predictor
+sur_dat<-tibble(fp=as.numeric(fp),
+                time=survival.time,
+                event=survival.status,
+                x1=mayo$mayoscore4,
+                x2=mayo$mayoscore5,
+                x3=x3,
+                x4=x4,
+                x5=x5,
+                x6=x6) %>%
+  arrange(fp)
+sur_dat$patientid<-1:length(fp)
+sur_dat$event=ifelse(sur_dat$event==0,'alive','death')
+sur_dat$event=factor(sur_dat$event,levels = c("death","alive"))
+exp_dat=sur_dat[,c(4:9)]
+tmp=t(scale(exp_dat))
+tmp[tmp > 1] = 1
+tmp[tmp < -1] = -1
+ha = HeatmapAnnotation(risk = anno_points(sur_dat$fp,axis = TRUE),
+                       time = anno_points(sur_dat$time, axis = TRUE,
+                                          pch = 16, default.unit = "native",
+                                          gp = gpar(col=sur_dat$event)))
+heatmap_1<-Heatmap(tmp, name = "value", cluster_columns = FALSE,
+                   top_annotation = ha, top_annotation_height = unit(50, "mm"),
+                   bottom_annotation_height = unit(3, "cm"))
+draw(heatmap_1,padding = unit(c(5, 20, 5, 2), "mm"))
+annotations = c("risk","time")
+for (element in annotations){
+  decorate_annotation(element, 
+                      {grid.text(element, unit(-12, "mm"), just = "right", gp = gpar(fontsize=12))})
+}
+```
+</br>
+&nbsp;
+
+## 建模相关可视化
+### 绘制ROC
+**使用pROC包绘制的核心代码如下：**
+```{r pROC,message=FALSE, message=FALSE, warning=FALSE}
+library(pROC)
+data(aSAH)
+fit.model <- glm(outcome ~ s100b + ndka, 
+                 data=aSAH, family=binomial())
+y_predict<-predict(fit.model,newdata=aSAH,type='response')
+modelroc_1<-roc(aSAH$outcome,y_predict)
+auc(modelroc_1)
+plot(modelroc_1,col="royalblue",mar=c(2, 6, 2, 6),print.thres="best")
+legend("bottomright", col=c("royalblue"), lwd=3, cex=0.75,
+       legend=c(paste("AUC=",round(auc(modelroc_1),3),sep="")))
+```
+</br>
+&nbsp;
+
+**ROC曲线的对比：**
+```{r pROC_2,message=FALSE}
+rocobj1 <- plot.roc(aSAH$outcome, y_predict, mar=c(2, 6, 2, 6),
+                    main="Statistical comparison", percent=TRUE, col="#1c61b6")
+rocobj2 <- lines.roc(aSAH$outcome, aSAH$ndka, percent=TRUE, col="#008600")
+testobj <- roc.test(rocobj1, rocobj2)
+text(50, 50, labels=paste("p-value =", format.pval(testobj$p.value)), adj=c(0, .5))
+legend("bottomright", legend=c("S100B", "NDKA"), col=c("#1c61b6", "#008600"), lwd=2)
+```
+</br>
+&nbsp;
+
+**Partial AUC：**
+```{r pROC_3,message=FALSE}
+plot.roc(aSAH$outcome, aSAH$s100b, # data
+         mar=c(2, 6, 2, 6),
+         percent=TRUE, # show all values in percent
+         partial.auc=c(100, 90), partial.auc.correct=TRUE, # define a partial AUC (pAUC)
+         print.auc=TRUE, #display pAUC value on the plot with following options:
+         print.auc.pattern="Corrected pAUC (100-90%% SP):\n%.1f%%", print.auc.col="#1c61b6",
+         auc.polygon=TRUE, auc.polygon.col="#1c61b6", # show pAUC as a polygon
+         max.auc.polygon=TRUE, max.auc.polygon.col="#1c61b622", # also show the 100% polygon
+         main="Partial AUC (pAUC)")
+plot.roc(aSAH$outcome, aSAH$s100b,
+         mar=c(2, 6, 2, 6),
+         percent=TRUE, add=TRUE, type="n", # add to plot, but don't re-add the ROC itself (useless)
+         partial.auc=c(100, 90), partial.auc.correct=TRUE,
+         partial.auc.focus="se", # focus pAUC on the sensitivity
+         print.auc=TRUE, print.auc.pattern="Corrected pAUC (100-90%% SE):\n%.1f%%", print.auc.col="#008600",
+         print.auc.y=40, # do not print auc over the previous one
+         auc.polygon=TRUE, auc.polygon.col="#008600",
+         max.auc.polygon=TRUE, max.auc.polygon.col="#00860022")
+```
+</br>
+&nbsp;
+
+**pROC funtion ggroc, based on ggplot2：**
+```{r pROC_4,message=FALSE}
+library(ggplot2)
+data(aSAH)
+rocobj <- roc(aSAH$outcome, aSAH$s100b)
+rocobj2 <- roc(aSAH$outcome, aSAH$wfns)
+rocobj3 <- roc(aSAH$outcome, aSAH$ndka)
+
+g <- ggroc(rocobj, alpha = 0.8, colour = "red", linetype = 2, size = 1)
+g + theme_bw() + ggtitle("My ROC curve") + 
+  geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed") +
+  theme(plot.margin=unit(c(1,6,2,6),'lines'))
+
+# Multiple curves:
+g.list <- ggroc(list(s100b=rocobj, wfns=rocobj2, ndka=rocobj3))
+
+# This is equivalent to using roc.formula:
+roc.list <- roc(outcome ~ s100b + ndka + wfns, data = aSAH)
+g.list <- ggroc(roc.list)
+g.list + theme_classic()
+
+# changing multiple aesthetics:
+g5 <- ggroc(roc.list, aes=c("linetype", "color"))
+g5
+
+# multiple facet
+g.list + facet_grid(.~name) + theme_bw() +
+  theme(legend.position="none",plot.margin=unit(c(6.6,1,6.6,1),'lines'))
+# To have all the curves of the same color, use aes="group":
+g.group <- ggroc(roc.list, aes="group")
+g.group + facet_grid(.~name) + theme_bw()  +
+  theme(plot.margin=unit(c(6.6,1,6.6,1),'lines'))
+```
+</br>
+&nbsp;
+
+**plotROC, based on ggplot2：**
+```{r ploptROC,message=FALSE}
+library(ggplot2)
+library(plotROC)
+library(pROC) # load data aSAH
+data(aSAH)
+fit.model <- glm(outcome ~ s100b + ndka, 
+                 data=aSAH, family=binomial())
+y_predict<-predict(fit.model,newdata=aSAH,type='response')
+data_test <- data.frame(outcome=aSAH$outcome,model=y_predict,ndka=aSAH$ndka)
+
+basic_plot <- ggplot(data_test, aes(d = outcome, m = model))+
+  geom_roc(labels = FALSE,colour=my_colors[1])
+basic_plot + style_roc() +
+  annotate("text", x = .75, y = .25, ## position of text
+           label = paste("AUC =", round(calc_auc(basic_plot)$AUC, 2))) +
+  geom_segment(aes(x = 1, xend = 0, y = 1, yend = 0), color="grey", linetype="dashed")+
+  ggtitle("Using original method") +
+  theme(plot.margin=unit(c(1,6,2,6),'lines'))
+
+roc_model<-roc(aSAH$outcome,y_predict)
+data_roc<-data.frame(TPF = roc_model$sensitivities,
+                     FPF = 1-roc_model$specificities,
+                     c = roc_model$thresholds)
+ggplot(data_roc, aes(x = FPF, y = TPF, label = c)) + 
+  geom_roc(stat = "identity",colour=my_colors[1],labels = FALSE) + style_roc()+
+  ggtitle("Using sensitivities & specificities") +
+  theme(plot.margin=unit(c(1,6,2,6),'lines'))
+
+ggplot(data_roc, aes(x = FPF, y = TPF, label = c)) + 
+  geom_smooth(method=lm, formula=y~poly(x,20),se=FALSE, color=my_colors[1], size=1)+
+  geom_segment(aes(x = 0, xend = 0, y = 0, yend = 0.125), color=my_colors[1],size=1)+
+  geom_segment(aes(x = 1, xend = 0, y = 1, yend = 0), color="grey", linetype="dashed")+
+  ggtitle("Using smooth line") +
+  theme_bw()+
+  theme(plot.margin=unit(c(1,6,2,6),'lines'))
+
+# Mulitiple ROC
+longtest <- melt_roc(data_test, "outcome", c("model", "ndka"))
+ggplot(longtest, aes(d = D, m = M, color = name))+
+  geom_roc(labels = FALSE) + style_roc() +
+  theme(plot.margin=unit(c(1,2,1,2),'lines'))
+
+ggplot(longtest, aes(d = D, m = M, color = name)) + 
+  geom_roc(labels = FALSE) + 
+  style_roc()+
+  facet_wrap(~name)+
+  ggsci::scale_color_lancet()+
+  theme(plot.margin=unit(c(3,0,3,0),'lines'))
+```
+</br>
+&nbsp;
+
+**plotROC, 交互式作图：**
+```{r ploptROC_interactive,message=FALSE,fig.keep='none', results = 'asis'}
+library(ggplot2)
+library(plotROC)
+library(pROC) # load data aSAH
+data(aSAH)
+fit.model <- glm(outcome ~ s100b + ndka, 
+                 data=aSAH, family=binomial())
+y_predict<-predict(fit.model,newdata=aSAH,type='response')
+data_test <- data.frame(outcome=aSAH$outcome,model=y_predict,ndka=aSAH$ndka)
+
+basic_plot <- ggplot(data_test, aes(d = outcome, m = model))+
+  geom_roc(labels = FALSE,colour=my_colors[1])
+fine_plot <- basic_plot + style_roc() +
+  annotate("text", x = .75, y = .25, ## position of text
+           label = paste("AUC =", round(calc_auc(basic_plot)$AUC, 2))) +
+  geom_segment(aes(x = 1, xend = 0, y = 1, yend = 0), color="grey", linetype="dashed")+
+  ggtitle("Interactive Plots")
+
+cat(
+  export_interactive_roc(fine_plot,
+                         prefix = "a")
+)
+```
+
+## 拟合曲线及置信区间
+### 拟合曲线及公式
+```{r, warning=F}
+lm_eqn = function(data){
+  x1<-data$x
+  x2<-x1*x1
+  y<-data$y
+  m=lm(y ~ x1+x2) 
+  eq <- substitute(italic(y) == a + b %.% italic(x) + c %.% italic(x)^2*","~~italic(r)^2~"="~r2,
+                   list(a = as.character(format(coef(m)[1], digits = 3)),
+                        b = as.character(format(coef(m)[2], digits = 3)),
+                        c = as.character(format(coef(m)[3], digits = 3)),
+                        r2 = as.character(format(summary(m)$r.squared, digits = 3))))
+  as.character(as.expression(eq))
+}
+
+# creat the data and base plot
+x1<-c(seq(1,10,1))
+y1<-2*x1*x1+3*x1+5+rnorm(10,0,5)
+dat<-data.frame(x=x1,y=y1)
+
+p <- ggplot(dat,aes(x=x,y=y)) + geom_point()
+
+# draw the line and function
+p + stat_smooth(method='lm',formula = y~poly(x,2),colour='red') +
+  scale_x_continuous(limits = c(1,19), breaks = c(seq(1,19,b=2))) + 
+  theme(axis.text=element_text(colour = 'black',size = 12), axis.title=element_text(size = 14)) +
+  annotate("text", x=6, y=20, label=lm_eqn(dat), hjust=0, size=5,family="Times",parse=TRUE)
+```
+
+上述需求其实可以用basicTrendline包实现（model参数选定不同的值可以得到不同的拟合模型），代码如下：
+```{r,warning=FALSE,message=FALSE}
+x<-dat$x
+y<-dat$y
+library(basicTrendline)
+trendline(x,y,model="line3P", summary=TRUE, paramDigit=10, legendPos="topleft",linecolor="red") 
+```
+
+补充一个：ggpmisc也可以呈现公式。
+
+
+### 将两组数据的三个时间点测量值进行趋势展示
+```{r}
+# 数据1的原始数据
+y<-c(30,50,40)
+sd<-c(3,7,4)
+x<-c(1,2,3)
+dat<-tibble(x=x,y=y)
+
+# 拟合曲线，得到公式，然后用于模拟中间的点
+p <- ggplot(dat,aes(x=x,y=y))+
+  geom_point()+
+  stat_smooth(method='lm',formula = y~poly(x,2),colour='red') +
+  scale_x_continuous(limits = c(0,4)) + 
+  scale_y_continuous(limits = c(0,60)) + 
+  theme(axis.text=element_text(colour = 'black',size = 12), axis.title=element_text(size = 14)) +
+  annotate("text", x=1, y=20, label=lm_eqn(dat), hjust=0, size=5,family="Times",parse=TRUE)
+
+x_<- 100:300
+df_1<-tibble(x=x_) %>%
+  mutate(x=x/100, y=-20+65*x-15*x*x, sd=-8+14.5*x-3.5*x*x, y_1=y-sd, y_2=y+sd)
+point_df_1<-tibble(x=c(1,2,3),y=c(30,50,40))
+
+# 模拟数据2
+point_df_2<-tibble(x=c(1,2,3),y=c(20,40,30))
+df_2<-df_1 %>%
+  mutate(x=x, y=y-10, y_1=y_1-10, y_2=y_2-10)
+
+ggplot(df_1,aes(x=x,y=y))+
+  geom_line(colour='red')+
+  geom_ribbon(aes(ymin = y_1,ymax = y_2),alpha = 0.16,fill="red")+
+  geom_point(data=point_df_1)+
+  scale_y_continuous(limits = c(0,60))+
+  scale_x_continuous(breaks = c(1,2,3))+
+  theme(panel.grid.major =element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"))+
+  geom_line(data=df_2,colour='blue')+
+  geom_ribbon(data=df_2,aes(ymin = y_1,ymax = y_2),alpha = 0.16,fill="royalblue")+
+  geom_point(data=point_df_2)
+```
+
+## 指数index或得分score在个样本中的数值展示
+```{r}
+ddf<-tibble(x=c(1:100),
+            y=abs(rnorm(100,1,1)),
+            group=as.factor(rep(c(1,2),50))) %>%
+  arrange(desc(y))
+ddf$x<-c(1:100)
+ggplot(ddf,aes(x=x,y=y,fill=group))+
+  geom_bar(stat="identity", width=1)+
+  theme(panel.grid.major =element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"))
+```
+</br>
+&nbsp;
+
+## 统计可视化
+
+推荐ggstatsplot这个包，非常棒的统计可视化工具！ 可参考：[ggstatsplot](https://indrajeetpatil.github.io/ggstatsplot/)
+
+需R的3.6版本及以上。做出来的图比如：
+
+<img src="D:/data_work/R_sources/my_code/Plots/stats_1.png"></img>
+
+
+## R和Rmarkdown的图片管理
+图片管理方面，确实走了很多弯路，此处总结一下规范的管理方法。
+首先提一点，在R的for循环中输出图片，除了保存到本地之外，其实可以print出来的，比如在循环中使用ggplot作图，可以print一下作图结果，就会显示多张图片。  
+
+### 使用R将图片保存到本地
+按照常规方法即可，如普通plot直接使用“png()...plot()...dev.off()”模式，似乎不太好写成单独的函数；ggplot系列则使用ggsave进行保存即可；此外，也可以使用鼠标点击Export导出图片。
+</br>
+&nbsp;
+
+### 使用R从本地读取图片并展示
+推荐使用EBImage包的readImage方法读取本地图片，然后使用display方法展示图片。详细见下文中介绍的“代码读取展示”方法。  
+</br>
+&nbsp;
+
+### Rmarkdown中展示本地图片的方法
+
+在Rmarkdown中展示本地图片有2种方法：markdown/html展示 和 代码读取展示。
+
+#### markdown/html展示
+最简单粗暴的方法是，使用 "感叹号+中括号+小括号"（不需要引号，括号内的链接也不需要引号），在小括号内填入本地资源路径即可。但是这种方式无法控制图片的大小和排版，一般考虑html式加载图片。  
+html里有各种方法都可以加载图片，但建议使用标准的方法，即img标签法。在img标签的src属性中填入本地图片路径或网络资源路径，然后可以再style中修改css设置图片大小。如果需要对多张图片排版，也有很多种方式，但推荐使用table进行排版，table排版最简单。总之，可以再rmarkdown里像html里那样各种操作。
+</br>
+&nbsp;
+
+#### 代码读取展示
+这里踩了很多坑！代码读取展示并不推荐，毕竟都展示图片了，没必要和代码牵扯上关系。但是，有两种情况可以借助代码实现更好的展示：一个是渲染出供浏览界面的图片，一个是将图片和作图融合。关于第一个，可以使用EBImage包的readImage方法读取本地图片，然后使用display方法展示图片，其中display中有个method参数，若设置为browser则为浏览模式，而设置为raster则为普通渲染模式。 代码示例如下（实际未运行）：
+
+```{r,message=FALSE,warning=FALSE}
+library(EBImage)
+pic1 <- readImage("Plots/polar_2.PNG")
+pic2 = flop(pic1)
+display(combine(list(pic1,pic2)),method="browser")
+```
+
+第二种情况，如何将已有图片与作图融合呢？可以使用magick读取图片，然后使用ggplotify这个包将图片对象转成ggplot对象。示例代码如下：
+
+```{r,message=FALSE,warning=FALSE}
+library(ggplot2)
+library(ggplotify)
+library(magick)
+library(shadowtext)
+pic<-image_read("Plots/polar_1.PNG")
+p<-as.ggplot(pic)
+p + geom_shadowtext(x=0.86,y=0.1,size=5,label="This is ggplot text")
+```
+
+
+R是一门统计语言，不是视觉处理语言，常规的方法如graphics包支持的作图都是基于坐标系，因此渲染出来的图片一般都有坐标系存在。曾尝试使用readPNG然后使用rasterImage方法渲染图片，但发现得到的图片带有坐标系，又不知道如何隐藏坐标系。当然应该有高级的方法实现，这可能得了解R可视化的底层原理才行。
+</br>
+&nbsp;
+
+### Rmarkdown中作图展示的方法
+首先必须指出一个容易犯的错误：不能使用inline模式插入图片！也就是两个单反点内部写个r然后加上code的形式，如果code是作图结果，那么是渲染不出来的！这里code如果是EBImage的browser模式，虽然能渲染出图片，但是frame框会很宽，完全无法控制排版！  
+Rmarkdown中作图展示，请使用代码正常展示！如果想插入文字后展示，那么请新开一个小的chunk进行展示！
+</br>
+&nbsp;
+
+### 作图排版的技巧
+这里不讨论Rmarkdown中使用html方法排版图片的情况，主要讨论代码中如何对图片排版。数据准备如下： 
+```{r,message=FALSE,warning=FALSE}
+library(ggplot2)
+p1 <- ggplot(mpg, aes(displ, hwy)) + geom_point() + geom_rug()
+p2 <- ggplot(faithful, aes(x=eruptions, y=waiting)) + geom_density_2d() + geom_point()
+p3 <- ggplot(mtcars, aes(x = factor(1), fill = factor(cyl))) + geom_bar(width = 1) + coord_polar()
+p4 <- ggplot(mtcars, aes(x = factor(cyl),fill=factor(cyl))) + geom_bar(width = 1) + coord_polar()
+
+p5 <- ggplot(mpg, aes(displ, hwy)) +
+  geom_point() +
+  geom_smooth()
+
+library(ggpubr)
+p6 <- ggplot(mpg, aes(x=displ, y=hwy))+
+  geom_point()+
+  stat_smooth(method="lm",se=TRUE)+
+  stat_cor(data=mpg, method = "pearson")
+
+p7 <- ggplot(iris, aes(x = Sepal.Length, y = Sepal.Width))+
+  geom_point(aes(color = Species))+               
+  geom_smooth(aes(color = Species, fill = Species))+
+  facet_wrap(~Species, ncol = 3, nrow = 1) # +
+# scale_color_manual(values = c("#00AFBB", "#E7B800", "#FC4E07"))+
+# scale_fill_manual(values = c("#00AFBB", "#E7B800", "#FC4E07"))
+
+my_comparisons <- list(c("setosa", "versicolor"), c("versicolor", "virginica"),c("setosa", "virginica"))
+p8 <- ggboxplot(iris, x = "Species", y = "Sepal.Length",
+                color = "Species", palette = c("#00AFBB", "#E7B800", "#FC4E07"),add = "jitter")+
+  stat_compare_means(comparisons = my_comparisons, method = "t.test")
+
+p9 <- ggplot(mtcars, aes(x=c(1:32), y=mpg)) + geom_point(color='red',size=1) + 
+  geom_segment( aes(x=c(1:32), xend=1:32, y=0,yend=mpg))+
+  ggtitle("P9")
+
+p10 <- ggplot(mtcars, aes(x=mpg, y=disp, size=cyl/3,color=carb)) + geom_point(alpha=0.4) +
+  scale_size_continuous( trans="exp", range=c(1, 10)) +
+  ggtitle("P10")
+
+library(ggExtra)
+p11 <- ggMarginal((ggplot(mtcars)+geom_point(aes(mpg, disp))+ ggtitle("P11")), type="histogram")
+
+library(rattle)
+cities <- c("Canberra", "Darwin", "Melbourne", "Sydney")
+ds <- subset(weatherAUS, Location %in% cities & ! is.na(Temp3pm))
+p12 <- ggplot(ds, aes(Temp3pm, colour=Location, fill=Location)) + geom_density(alpha=0.3) +
+  ggtitle("P12")
+```
+
+代码对图片排版后，多张图合并成了一张图，不可分割（html排版得到的图片是可以分开保存的）。排版图片主要有两种方法，第一种是熟知的ggpubr包中的ggarrange方法排版ggplot系列图片，代码示例如下：
+
+```{r,fig.height=5,message=FALSE,warning=FALSE}
+library(ggpubr)
+ggarrange(p1, p2, p3, p4, labels = c("A", "B", "C", "D"),
+          ncol = 2, nrow = 2)
+```
+
+
+第二种方法是使用cowplot，代码示例如下：
+
+```{r,message=FALSE,warning=FALSE}
+library(cowplot)
+ggdraw() +
+  draw_plot(p5, 0, .5, .5, .5) +
+  draw_plot(p6, .5, .5, .5, .5) +
+  draw_plot(p7, 0, 0, .5, .5) +
+  draw_plot(p8, .5, 0, .5, .5) +
+  draw_plot_label(c("A", "B", "C", "D"), c(0, 0.5, 0, 0.5), c(1, 1, 0.5, 0.5), size = 15)
+# notice: left and bottom is 0
+```
+
+第三种是使用patchwork，这个最灵活，可参考：[patchwork](https://patchwork.data-imaginist.com/index.html)。示例代码如下：
+
+```{r,fig.height=6,message=FALSE,warning=FALSE}
+library(patchwork)
+p9 + plot_spacer() + p10 + plot_spacer()+  p11 + p12
+
+(p9 / p11) | (p10 / p12)
+
+p9 + p7 + p10 + p8 +
+  plot_layout(widths = c(1,3))
+
+layout <- "
+AAAA##
+BBCCCC
+BBDDEE
+"
+
+p7 + p10 + p8 + p5 + p6 +
+  plot_layout(design = layout)
+
+layout <- c(
+  area(t=5, l=1, b=9, r=5),
+  area(t=3, l=3, b=7, r=7),
+  area(t=1, l=5, b=5, r=9)
+)
+
+p9 + p10 + p12 +
+  plot_layout(design = layout)
+
+# legned
+p5 + p6 + p7 + p8 +
+  plot_layout(guides = "collect")
+
+p6 + p7 + p8 + guide_area() +
+  plot_layout(guides = "collect")
+
+```
+
+
+
+## 维恩图
+
+当集合较多时，常规维恩图不够直观，可考虑如下可视化方法。当然，实现该方法，除了下述代码中使用的UpSetR包以外，还有ComplexHeatmap包也是可以实现的，可参考：[ComplexHeatmap之UpSet](https://jokergoo.github.io/ComplexHeatmap-reference/book/upset-plot.html)。此外，ggplot扩展系列的ggupset也可以实现ggplot版本的集合图（以及ggplot扩展系列的ggVennDiagram可以画ggplot版的维恩图）。
+
+```{r,message=FALSE,warning=FALSE}
+library(UpSetR)
+require(ggplot2)
+require(dplyr);
+require(gridExtra)
+require(grid)
+input <- c(
+  'cancer1'=  1578, 'cancer2' =  1284, 'cancer3' = 2488,
+  'cancer1&cancer2'  =205, 'cancer1&cancer3'  = 828,
+  'cancer2&cancer3'  =589,'cancer1&cancer2&cancer3'   =120
+)
+
+data <- fromExpression(input)
+upset(data, nsets = 9, sets = c('cancer1', 'cancer2','cancer3'), keep.order = TRUE,
+      point.size = 5, line.size = 1.3, mainbar.y.label = "IntersectionSize", sets.x.label = "",
+      mb.ratio = c(0.60, 0.40), text.scale = c(2, 2, 0.5, 0.5,2, 2))
+```
+
+## 创建包和文档
+
+### 创建包的命令和方法
+
+建议使用Rstudio自带的创建包的框架，即：点击File -> New Project，然后选择New Directory，接着选择R Package，然后对DESCRIPTION文件进行适当修改（在RStudio右边Files里打开）。  
+创建R代码后，可以借助roxygen创建文档注释（用于生成文档），RStudio的快捷键来实现：Ctrl+Shift+Alt+R（光标放在函数名上）。  
+具体的可稍微参考：[如何快速写一个R包](https://www.bioinfo-scrounger.com/archives/546/)。  
+另外一些常用的命令如下：
+```{r,eval=FALSE}
+# Generate Rmd
+library(roxygen2)
+roxygenize(getwd())
+
+# remove the old package
+detach(package:FanCodeV1, unload=TRUE)
+remove.packages("FanCodeV1")
+
+# build the new package
+buid_CMD<-paste("R CMD build",getwd())
+system(buid_CMD)
+# install_CMD<-paste(getwd(),"/FanCodeV1_0.1.0.tar.gz",sep="")
+# install.packages(install_CMD, repos=NULL, type="source")
+```
+构建和安装自己的R包，上述命令的install得到的文档似乎打不开，建议使用这个方法：点击 'Build' -> 'Install and Restart', 或使用快捷键 "Ctrl+Shift+B"。
+
+### 渲染Rmarkdown文档的命令
+
+```{r,eval=FALSE}
+library(rmarkdown)
+render("../../temp/dashboard_2.Rmd")
+```
+</br>
+&nbsp;
+
+## 数据库资源
+
+### 文献管理工具
+
+RefManageR基于BibTeX，比NoteExpress和EndNote要灵活很多。  
+BibTeX是LaTeX中进行文献管理的扩展。BibTeX的使用可参考：[使用BibTeX生成参考文献列表](https://www.latexstudio.net/archives/5594) 或 [BibTeX的使用方法](https://www.cnblogs.com/parrynee/archive/2010/03/02/1676369.html)，尤其是前面那个讲得不错。
+
+而LaTeX的学习，可以稍微看看：[如何在1小时内快速入手LaTeX](https://www.zhihu.com/question/268569440) 以及[LaTex 入门](https://blog.csdn.net/cocoonyang/article/details/78036326)。除非必要，笔者并不推荐认真学习LaTeX规则，因为真的挺复杂的，大致了解下就行。
+
+最重要的是RefManageR的参考手册：[SUser Manual for R package RefManageR](https://cran.r-project.org/web/packages/RefManageR/vignettes/manual.pdf)，这个在平时使用的时候可以翻一翻。
+
+贴几个示例代码：
+
+```{r,message=FALSE,warning=FALSE}
+library(RefManageR)
+
+bib <- BibEntry(bibtype="Article", key = "barry1996", date = "1996-08",
+                title = "A Diagnostic to Assess the Fit of a Variogram to Spatial Data",
+                author = "Ronald Barry", journaltitle = "Journal of Statistical Software",
+                volume = 1, number = 1)
+bib[author = "Barry"]
+
+file <- system.file("Bib", "biblatexExamples.bib", package = "RefManageR")
+bib <- ReadBib(file, check = FALSE) ## bibtype有多种，字段不统一
+bibs<-bib[c("yoon","weinberg")]
+print(bibs, .opts = list(check.entries = FALSE
+                         ,bib.style = "numeric"
+                         ,first.inits = F
+                         ,max.names = 6
+                         ,sorting = "nyt"
+                         ,style = "markdown"
+))
+
+bib[bibtype="Article"][c(1:3)]
+bib[author = "Yoon"]$author$family[c(1:3)]
+```
+
+```{r,results = "asis"}
+bib_Liu <- ReadPubMed("X. Shirley Liu", database = "PubMed")
+# unclass(a)
+bib_Liu$month<-NULL
+print(bib_Liu[c(1:3)], .opts = list(check.entries = FALSE
+                         ,bib.style = "numeric"
+                         ,first.inits = T
+                         ,max.names = 5
+                         ,sorting = "nyt"
+                         ,style = "markdown"
+))
+```
+
+当然，可以使用正则表达式对上述结果进行进一步加工（比如去除括号，加粗字体），让其符合某些杂志社的引用规范。
+
+值得一提的是，ReadPubMed和某些数据库的引用结果的返回结果里是有摘要的，可以用这个进行个性化搜索，定制自己的文献搜索引擎。
+
+### NCBI数据库资源
+
+NCBI提供了丰富的接口，文档可参考：[文档主目录](https://www.ncbi.nlm.nih.gov/books/NBK25501/) 、 [方法说明和参数设置](https://www.ncbi.nlm.nih.gov/books/NBK25499/) 、 [返回值的可选类型和模式](https://www.ncbi.nlm.nih.gov/books/NBK25499/table/chapter4.T._valid_values_of__retmode_and/?report=objectonly) 以及 [九种接口简介](https://www.ncbi.nlm.nih.gov/books/NBK25497/#chapter2.The_Nine_Eutilities_in_Brief)
+
+笔者经过测试后发现，拉取10000条fetch数据或summary数据时，R很吃力，而Python则相对轻松，因此，笔者将NCBI数据获取的阵地转移到了Python环境中，当然小规模数据也可以使用R。
+
+以下为R代码示例：
+
+```{r,eval=FALSE}
+library(httr)
+library(xml2)
+library(dplyr)
+#-------------------search------------------------
+term <- 'colon+cancer'
+urls <- parse_url("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi")
+urls$query <- list(db='pubmed', term=term, usehistory='y', retmax='5')
+search_results<- urls %>% build_url %>% GET()
+
+content_main<-read_xml(content(search_results, "text"))
+content_children<-xml_children(content_main)
+ids <- content_children[6] %>% xml_children %>% xml_text
+QueryKey <- content_children[4] %>% xml_text
+webenv <- content_children[5] %>% xml_text
+
+#-------------------fetch------------------------
+urls <- parse_url("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi")
+urls$query <- list(Query_key=QueryKey, WebEnv=webenv, db='pubmed',
+                   rettype="abstract", retmode="text", retmax='5')
+fetch_results<-urls %>% build_url %>% GET()
+fetch_results_text<-content(fetch_results, "text")
+# write.table(fetch_results_text,'fetch_results.txt',col.names=F)
+
+#-------------------summary------------------------
+urls <- parse_url("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi")
+urls$query <- list(Query_key=QueryKey, WebEnv=webenv, db='pubmed',
+                   retmode="text", retmax='5', version='2.0')
+summary_results<- urls %>% build_url %>% GET()
+summary_results_xml<-read_xml(content(summary_results, "text"))
+# write.table(summary_results_xml,'summary_results.txt',col.names=F)
+```
+
+网上看到的另一个写法如下（本质上是一样的），来源：[R语言网络爬虫之Pubmed API的使用](https://cloud.tencent.com/developer/article/1477089)
+
+```{r,eval=FALSE}
+library(XML)
+library(RCurl)
+path='https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
+web=getForm(path,db='pubmed',term='SI[gene]+AND+cancer',usehistory='y',RetMax='10',RetStart='1')
+doc<-xmlParse(web,asText=T,encoding="UTF-8") 
+webenv<-sapply(getNodeSet(doc,"//WebEnv"),xmlValue)
+key<-sapply(getNodeSet(doc,"//QueryKey"),xmlValue)
+path1='https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
+res=getForm(path1,Query_key=key,db='pubmed',WebEnv=webenv,rettype='abstract',retmode='text',RetMax='10')
+# write.table(res,'D:\\data_others\\examle.txt',col.names=F)
+```
+
+
+## 资源链接
+
+生信搜图：[http://viziometrics.org/](http://viziometrics.org/)
+
+医学专用搜图：[https://openi.nlm.nih.gov/](https://openi.nlm.nih.gov/)
+
+搜索相似文献（投稿、论文引用、找审稿人）：[http://jane.biosemantics.org/](http://jane.biosemantics.org/)
+
+电脑里下了一些速查表，其中有一个是不分领域的表集合，格式是md后缀的，可以用jupyter notebook打开查看。
+
+## 其他
+
+### 读取数据
+读取数据时（如使用read.csv），将check.names设置为FALSE，就可保留表头的横杠，而不至于变成点。
+
+可将stringsAsFactors 设置为FALSE，就可以保留string类型。
+
+### 读取网上的资源
+示例：
+
+```{r,eval=FALSE}
+read.table(curl("http://raw.githubusercontent.com/ebecht/MCPcounter/master/Signatures/probesets.txt"),
+           sep="\t",stringsAsFactors=FALSE,colClasses="character")
+```
+
+### 手动scale与pheatmap的scale
+小样本时，颜色上有些细微差别，原因在于pheatmap的调色板考虑了对称性，即保证调色板的中心是0。而手动scale可能会出现正方向最大值和负方向最大值的绝对值并不相等，以致于调色板中心不是0。所以，虽然scale后数值没变，但是颜色有偏移。
+
+pheatmap是可以设置调色板的，可以参考：[不同数据集画出的热图，用同样的颜色区间上色](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247485121&idx=1&sn=1f13c083ba9b7fe801d860aedcd60d34&chksm=ec43b786db343e9021d46240f1eda362a7a6d1739b398a6061f9d70178d374c0668811ec5c9c&mpshare=1&scene=1&srcid=0425VfqJCXj2WJ4BjobljLeI&sharer_sharetime=1587806402954&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=111d5d7ed497d5962489157d76a0d21f578bda72ef81b5d74bc6d59acab1a6ab44d66de2d2c91434c2b3420d71c7437a33395a025705ef11452eddb63847d72eb9603e83b0fdb9ac79c9540dfa9d77e4&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AbnYOPxVsZElNGkrEnZ3zmw%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+另外，其实pheatmap的出图是可以保存到变量里的，出图也可以像ggplot那样沉默化（使用参数silent即可）。
+
+### 美化base plot
+
+prettyB这个包可以，可参考：[base plot出的图，富有时代感！这个包，让你穿越回9102](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247488367&idx=1&sn=680d7cf392b52da1517b6c61b716c8b7&chksm=ec43a228db342b3e31ce0a75c2173dab08f69269fb44849149913c708a6072c3f943ec335554&mpshare=1&scene=1&srcid=0425BHZVrkVbMnpMgyELF4uU&sharer_sharetime=1587793809406&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=5a373e833a8cf09c7e3f7bbfd2462c57def74b043b910b810bd35ec7a4bb07acafecb3c38b9ab5ac8c1032cf96f8476ed5d4425fa2c3c10d2152b93f784743f3a888daa685b5403ee7e38ea963757b19&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AWrAf43LLB1maw8ELnjSRnM%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+ggfree这个包也可以看看，可参考：[ggfree:试图让你摆脱ggplot2](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247488421&idx=1&sn=d5c7ab88c75628cafe13a601e2c7c81f&chksm=ec43a2e2db342bf4b73f6e2641ae83e51ec08e3e20ba2e22de33782befa510c82ce5f97bc0a1&mpshare=1&scene=1&srcid=0422Ubw1We0AEEWt8xQMkI16&sharer_sharetime=1587793924942&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=99c11556750d17516c5d3301ad3efa5c43b4baa0a960f9afae91a6a064a0325fbec3f1a854b6d306a534b2ff2d9ee96361dd08f2966e9034d909a5c98636ce1f686fd4d634733db3a0c2bea0474513e8&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=AaJi1EQ0DNsU3guqgtmopIg%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+纹理填充代替颜色，可参考：[不想画彩图了，用纹理填充吧，省掉好多版面费](https://mp.weixin.qq.com/s?__biz=MzI5NjUyNzkxMg==&mid=2247488059&idx=1&sn=fcb5fd219508fbd05064613360868926&chksm=ec43a37cdb342a6a667edac14ca3d291fa25edd1c9f7149fed49dd9b48390e64ffe664ead0e5&mpshare=1&scene=1&srcid=0422yhBZVPxX75E5FX0rLw1i&sharer_sharetime=1587794007603&sharer_shareid=51900005c2a3ce086c759ed67202d273&key=cac8859db214b542073d9851f1c3b7bec2b89d28c5717c476511d31a94e0c1a8972b1db6db0542d08632c42e490eac6aaaa4639fcbaef340c284674283e805615739c39261f899b3f387b3bbfba9641b&ascene=1&uin=NzMxMDI1MDEy&devicetype=Windows+10+x64&version=62090070&lang=zh_CN&exportkey=ASN%2FzGwaqTn%2FXJGPmty6I%2Fo%3D&pass_ticket=5A8B8bZ1UfC6%2BkmBzQVtMU111ebEpetNGuypfi39d5E7I%2Fya2g%2BD7zz%2F9sSATCyh)
+
+### R中的正则表达式
+可参考：[字符串处理与正则表达式](https://zhuanlan.zhihu.com/p/29807307)
+
+### 更新R版本
+
+可参考：[如何更新R版本及Rstudio](https://blog.csdn.net/weixin_41859179/article/details/97570369)
+```{r,eval=FALSE}
+library(installr)
+updateR()
+```
+
+
+### 安装包的一些用法：
+```{r github,eval=FALSE}
+install_github("ebecht/MCPcounter",ref="master", subdir="Source")
+```
+
+github安装显示无法打开URL时，可以复制相应的URL（api.github.com/repos/...），然后自己去浏览器里下载，然后本地安装。
+
+
